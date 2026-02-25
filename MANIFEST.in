@@ -1,0 +1,6 @@
+include kaitet_taskwork/templates/*.html
+include kaitet_taskwork/templates/*.js
+recursive-include kaitet_taskwork/public *
+recursive-include kaitet_taskwork/templates *
+recursive-include kaitet_taskwork/www *
+recursive-include kaitet_taskwork/translations *

@@ -1,0 +1,133 @@
+{
+ "charts": [],
+ "content": "[{\"type\":\"onboarding\",\"data\":{\"onboarding_name\":\"Task Work\",\"col\":12}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"header\",\"data\":{\"text\":\"<h3>Masters</h3>\",\"col\":12}},{\"type\":\"card\",\"data\":{\"card_name\":\"Workers & Locations\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Task Work Operations\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Disbursements\",\"col\":4}}]",
+ "creation": "2026-02-23 08:00:00.000000",
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "is_hidden": 0,
+ "label": "Task Work",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workers & Locations",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Task Worker",
+   "link_count": 0,
+   "link_to": "Task Worker",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Work Location",
+   "link_count": 0,
+   "link_to": "Work Location",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Task Work Operations",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Task Work Request",
+   "link_count": 0,
+   "link_to": "Task Work Request",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Task Work Plan",
+   "link_count": 0,
+   "link_to": "Task Work Plan",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Task Work Assignment",
+   "link_count": 0,
+   "link_to": "Task Work Assignment",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Disbursements",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "TW Weekly Disbursement",
+   "link_count": 0,
+   "link_to": "TW Weekly Disbursement",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-02-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kaitet Taskwork",
+ "name": "Task Work",
+ "owner": "Administrator",
+ "public": 1,
+ "roles": [],
+ "sequence_id": 1,
+ "shortcuts": [
+  {
+   "color": "Purple",
+   "doc_view": "List",
+   "label": "Task Workers",
+   "link_to": "Task Worker",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "TW Requests",
+   "link_to": "Task Work Request",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Weekly Disbursements",
+   "link_to": "TW Weekly Disbursement",
+   "type": "DocType"
+  }
+ ],
+ "title": "Task Work"
+}

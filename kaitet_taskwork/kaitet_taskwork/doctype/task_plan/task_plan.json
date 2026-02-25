@@ -1,0 +1,44 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-09-07 20:09:48.167344",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "task_worker",
+  "worker_name"
+ ],
+ "fields": [
+  {
+   "fieldname": "task_worker",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Task Worker",
+   "options": "Task Worker",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "task_worker.full_name",
+   "fieldname": "worker_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Worker Name",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-02-23 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kaitet Taskwork",
+ "name": "Task Plan",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

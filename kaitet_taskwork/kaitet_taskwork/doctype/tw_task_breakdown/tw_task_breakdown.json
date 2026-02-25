@@ -1,0 +1,82 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-02-23 08:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "daily_form_ref",
+  "task_name",
+  "work_date",
+  "work_location",
+  "cost_centre",
+  "amount"
+ ],
+ "fields": [
+  {
+   "fieldname": "daily_form_ref",
+   "fieldtype": "Link",
+   "label": "Assignment",
+   "options": "Task Work Assignment",
+   "in_list_view": 1,
+   "columns": 3
+  },
+  {
+   "fieldname": "task_name",
+   "fieldtype": "Data",
+   "label": "Task / Request",
+   "in_list_view": 1,
+   "read_only": 1,
+   "columns": 4
+  },
+  {
+   "fieldname": "work_date",
+   "fieldtype": "Date",
+   "label": "Week Start",
+   "in_list_view": 1,
+   "read_only": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "work_location",
+   "fieldtype": "Data",
+   "label": "Location",
+   "in_list_view": 1,
+   "read_only": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "cost_centre",
+   "fieldtype": "Link",
+   "label": "Cost Centre",
+   "options": "Cost Center",
+   "in_list_view": 1,
+   "read_only": 1,
+   "columns": 3
+  },
+  {
+   "bold": 1,
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "in_list_view": 1,
+   "read_only": 1,
+   "columns": 2
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-02-24 08:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kaitet Taskwork",
+ "name": "TW Task Breakdown",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

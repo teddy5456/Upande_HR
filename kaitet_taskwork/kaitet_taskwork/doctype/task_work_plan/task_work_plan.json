@@ -1,0 +1,194 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "title_field": "title",
+ "creation": "2025-09-07 20:07:14.287842",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_h0eo",
+  "amended_from",
+  "naming_series",
+  "title",
+  "managers_name",
+  "unitdivision",
+  "column_break_jwhg",
+  "business_unit",
+  "cost_centre",
+  "posting_date",
+  "task_work_request_ref",
+  "stage",
+  "company",
+  "section_break_czht",
+  "no_of_approved_workers",
+  "approved_estimated_cost",
+  "section_break_nlat",
+  "entries"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_h0eo",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Task Work Plan",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "TWP-.YYYY.-"
+  },
+  {
+   "bold": 1,
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "managers_name",
+   "fieldtype": "Link",
+   "label": "Farm Manager's Name",
+   "options": "Employee",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "managers_name.custom_farm",
+   "fieldname": "unitdivision",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Unit/Division",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_jwhg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "business_unit",
+   "fieldtype": "Data",
+   "label": "Business Unit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cost_centre",
+   "fieldtype": "Link",
+   "label": "Cost Centre",
+   "options": "Cost Center",
+   "read_only": 1
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Posting Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_nlat",
+   "fieldtype": "Section Break",
+   "label": "Workers"
+  },
+  {
+   "fieldname": "entries",
+   "fieldtype": "Table",
+   "label": "Entries",
+   "options": "Task Plan"
+  },
+  {
+   "fieldname": "task_work_request_ref",
+   "fieldtype": "Link",
+   "label": "Task Work Request Ref",
+   "options": "Task Work Request",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_czht",
+   "fieldtype": "Section Break",
+   "label": "Approved Request Details"
+  },
+  {
+   "bold": 1,
+   "fetch_from": "task_work_request_ref.total_workers",
+   "fieldname": "no_of_approved_workers",
+   "fieldtype": "Int",
+   "label": "No. of Approved Workers",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "task_work_request_ref.estimated_cost",
+   "fieldname": "approved_estimated_cost",
+   "fieldtype": "Currency",
+   "label": "Approved Estimated Cost",
+   "read_only": 1
+  },
+  {
+   "default": "Planned",
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stage",
+   "options": "Planned\nAssigned\nIn Progress\nCompleted",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "managers_name.company",
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "label": "Company",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [
+  {
+   "group": "Task Work",
+   "label": "Assignments",
+   "link_doctype": "Task Work Assignment",
+   "link_fieldname": "task_work_plan"
+  }
+ ],
+ "modified": "2025-10-12 12:16:04.792889",
+ "modified_by": "Administrator",
+ "module": "Kaitet Taskwork",
+ "name": "Task Work Plan",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

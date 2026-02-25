@@ -1,0 +1,306 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-02-23 08:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "section_break_header",
+  "year",
+  "week_number",
+  "column_break_header",
+  "company",
+  "posting_date",
+  "status",
+  "amended_from",
+  "section_break_accounts",
+  "wages_account",
+  "column_break_accounts",
+  "payment_account",
+  "section_break_dates",
+  "week_start_date",
+  "column_break_dates",
+  "week_end_date",
+  "section_break_fetch",
+  "get_disbursement_data",
+  "section_break_summary",
+  "disbursement_entries",
+  "section_break_totals",
+  "total_workers",
+  "total_gross",
+  "column_break_totals",
+  "total_deductions",
+  "total_net",
+  "section_break_breakdown",
+  "task_breakdown",
+  "section_break_payment",
+  "payment_reference",
+  "payment_date",
+  "journal_entry",
+  "paid_on",
+  "paid_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "TWD-.YYYY.-",
+   "default": "TWD-.YYYY.-"
+  },
+  {
+   "fieldname": "section_break_header",
+   "fieldtype": "Section Break",
+   "label": "Week Selection"
+  },
+  {
+   "bold": 1,
+   "default": "2026",
+   "fieldname": "year",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Year",
+   "reqd": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "week_number",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Week No.",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Posting Date",
+   "reqd": 1
+  },
+  {
+   "bold": 1,
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nPending\nApproved\nPaid\nCancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "TW Weekly Disbursement",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "section_break_accounts",
+   "fieldtype": "Section Break",
+   "label": "Accounting"
+  },
+  {
+   "fieldname": "wages_account",
+   "fieldtype": "Link",
+   "label": "Wages Expense Account",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Expense account to debit when marking as paid (e.g. Daily Rate Wages)"
+  },
+  {
+   "fieldname": "column_break_accounts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_account",
+   "fieldtype": "Link",
+   "label": "Payment Bank Account",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Bank or cash account the wages are paid from (will be credited in the Journal Entry)"
+  },
+  {
+   "fieldname": "section_break_dates",
+   "fieldtype": "Section Break",
+   "label": "Week Dates"
+  },
+  {
+   "fieldname": "week_start_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Week Start (Monday)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "week_end_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Week End (Sunday)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_fetch",
+   "fieldtype": "Section Break",
+   "label": "Load Disbursement Data"
+  },
+  {
+   "fieldname": "get_disbursement_data",
+   "fieldtype": "Button",
+   "label": "Get Worker Payments for Week"
+  },
+  {
+   "fieldname": "section_break_summary",
+   "fieldtype": "Section Break",
+   "label": "Worker Payment Summary"
+  },
+  {
+   "fieldname": "disbursement_entries",
+   "fieldtype": "Table",
+   "label": "Worker Payments",
+   "options": "TW Disbursement Entry"
+  },
+  {
+   "fieldname": "section_break_totals",
+   "fieldtype": "Section Break"
+  },
+  {
+   "bold": 1,
+   "fieldname": "total_workers",
+   "fieldtype": "Int",
+   "label": "Total Workers",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_gross",
+   "fieldtype": "Currency",
+   "label": "Total Gross Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_deductions",
+   "fieldtype": "Currency",
+   "label": "Total Deductions",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "total_net",
+   "fieldtype": "Currency",
+   "label": "Total Net Payable",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_breakdown",
+   "fieldtype": "Section Break",
+   "label": "Per-Assignment Breakdown"
+  },
+  {
+   "fieldname": "task_breakdown",
+   "fieldtype": "Table",
+   "label": "Breakdown",
+   "options": "TW Task Breakdown"
+  },
+  {
+   "depends_on": "eval:doc.docstatus===1",
+   "fieldname": "section_break_payment",
+   "fieldtype": "Section Break",
+   "label": "Payment Details"
+  },
+  {
+   "allow_on_submit": 1,
+   "depends_on": "eval:doc.docstatus===1",
+   "fieldname": "payment_reference",
+   "fieldtype": "Data",
+   "label": "Payment Reference"
+  },
+  {
+   "allow_on_submit": 1,
+   "depends_on": "eval:doc.docstatus===1",
+   "fieldname": "payment_date",
+   "fieldtype": "Date",
+   "label": "Payment Date"
+  },
+  {
+   "depends_on": "eval:doc.status=='Paid'",
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.status=='Paid'",
+   "fieldname": "paid_on",
+   "fieldtype": "Date",
+   "label": "Marked Paid On",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.status=='Paid'",
+   "fieldname": "paid_by",
+   "fieldtype": "Link",
+   "label": "Marked Paid By",
+   "options": "User",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-02-24 17:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kaitet Taskwork",
+ "name": "TW Weekly Disbursement",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

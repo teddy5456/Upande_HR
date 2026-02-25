@@ -1,0 +1,197 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2025-09-28 10:11:44.045023",
+ "default_view": "List",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "farm_manager",
+  "total_estimated_cost",
+  "naming_series",
+  "unitdivision",
+  "business_unit",
+  "stage",
+  "start_date",
+  "completion_date",
+  "column_break_trmw",
+  "company",
+  "cost_centre",
+  "task_work_request",
+  "task_work_plan",
+  "expected_start_date",
+  "expected_end_date",
+  "section_break_jjun",
+  "task_details",
+  "section_break_ygwd",
+  "worker_assignments",
+  "amended_from"
+ ],
+ "title_field": "title",
+ "fields": [
+  {
+   "bold": 1,
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "default": "Pending",
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stage",
+   "options": "Pending\nIn Progress\nCompleted",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "task_work_request.farm_managers_name",
+   "fieldname": "farm_manager",
+   "fieldtype": "Link",
+   "label": "Farm Manager",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "total_estimated_cost",
+   "fieldtype": "Currency",
+   "label": "Total Estimated Cost"
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "TWO.-"
+  },
+  {
+   "fetch_from": "farm_manager.custom_farm",
+   "fieldname": "unitdivision",
+   "fieldtype": "Data",
+   "label": "Unit/Division"
+  },
+  {
+   "fieldname": "business_unit",
+   "fieldtype": "Data",
+   "label": "Business Unit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date"
+  },
+  {
+   "fieldname": "completion_date",
+   "fieldtype": "Date",
+   "label": "Completion Date"
+  },
+  {
+   "fieldname": "column_break_trmw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "farm_manager.company",
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "label": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cost_centre",
+   "fieldtype": "Link",
+   "label": "Cost Centre",
+   "options": "Cost Center",
+   "read_only": 1
+  },
+  {
+   "fieldname": "task_work_request",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Task Work Request",
+   "options": "Task Work Request"
+  },
+  {
+   "fieldname": "task_work_plan",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Task Work Plan",
+   "options": "Task Work Plan"
+  },
+  {
+   "fetch_from": "task_work_request.custom_expected_start_date",
+   "fieldname": "expected_start_date",
+   "fieldtype": "Date",
+   "label": "Expected Start Date"
+  },
+  {
+   "fetch_from": "task_work_request.custom_expected_end_date",
+   "fieldname": "expected_end_date",
+   "fieldtype": "Date",
+   "label": "Expected End Date"
+  },
+  {
+   "fieldname": "section_break_jjun",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "task_details",
+   "fieldtype": "Table",
+   "label": "Task Details",
+   "options": "Task Details"
+  },
+  {
+   "fieldname": "section_break_ygwd",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "worker_assignments",
+   "fieldtype": "Table",
+   "label": "Worker Assignments",
+   "options": "Worker Assignments"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Task Work Assignment",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2025-10-22 04:54:22.042307",
+ "modified_by": "Administrator",
+ "module": "Kaitet Taskwork",
+ "name": "Task Work Assignment",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

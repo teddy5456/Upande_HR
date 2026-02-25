@@ -1,0 +1,240 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:title",
+ "creation": "2025-09-05 23:54:06.175215",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_n9jz",
+  "title",
+  "custom_company",
+  "posting_date",
+  "amended_from",
+  "managersupervisor_name",
+  "payroll_no",
+  "unitdivision",
+  "business_unit",
+  "column_break_vdom",
+  "overtime_type",
+  "overtime_period",
+  "from_date",
+  "end_date",
+  "from_time",
+  "to_time",
+  "hours",
+  "reason",
+  "section_break_cost",
+  "hourly_rate",
+  "total_employees",
+  "column_break_cost",
+  "estimated_cost",
+  "section_break_anzc",
+  "entries"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_n9jz",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Bulk Overtime Requisition",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "custom_company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "managersupervisor_name",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Farm Manager/Supervisor Name",
+   "options": "Employee",
+   "reqd": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "managersupervisor_name.employee_number",
+   "fieldname": "payroll_no",
+   "fieldtype": "Data",
+   "label": "Payroll No.",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "managersupervisor_name.custom_farm",
+   "fieldname": "unitdivision",
+   "fieldtype": "Data",
+   "label": "Unit/Division",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "managersupervisor_name.custom_business_unit",
+   "fieldname": "business_unit",
+   "fieldtype": "Data",
+   "label": "Business Unit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_vdom",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "overtime_type",
+   "fieldtype": "Select",
+   "label": "Overtime Type",
+   "options": "\nNormal Overtime\nHoliday Overtime\nWeekend Overtime"
+  },
+  {
+   "fieldname": "overtime_period",
+   "fieldtype": "Select",
+   "label": "Overtime Period",
+   "options": "\nLunch Overtime\nAfter-Hours Overtime"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Datetime",
+   "label": "Posting Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "label": "From Date"
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date"
+  },
+  {
+   "fieldname": "from_time",
+   "fieldtype": "Time",
+   "label": "From Time"
+  },
+  {
+   "fieldname": "to_time",
+   "fieldtype": "Time",
+   "label": "To Time"
+  },
+  {
+   "fieldname": "hours",
+   "fieldtype": "Float",
+   "label": "Hours"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_cost",
+   "fieldtype": "Section Break",
+   "label": "Cost Estimation"
+  },
+  {
+   "fieldname": "hourly_rate",
+   "fieldtype": "Currency",
+   "label": "Hourly Rate",
+   "description": "Overtime hourly rate per employee"
+  },
+  {
+   "fieldname": "total_employees",
+   "fieldtype": "Int",
+   "label": "Total Employees",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_cost",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "estimated_cost",
+   "fieldtype": "Currency",
+   "label": "Estimated Cost",
+   "read_only": 1,
+   "bold": 1,
+   "description": "Calculated as: Number of Employees x Hours x Hourly Rate"
+  },
+  {
+   "fieldname": "section_break_anzc",
+   "fieldtype": "Section Break",
+   "label": "Overtime Entries"
+  },
+  {
+   "fieldname": "entries",
+   "fieldtype": "Table",
+   "label": "Entries",
+   "options": "Overtime Entry"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-02-02 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kaitet Taskwork",
+ "name": "Bulk Overtime Requisition",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

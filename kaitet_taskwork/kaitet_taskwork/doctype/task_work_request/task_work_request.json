@@ -1,0 +1,162 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:title",
+ "creation": "2025-09-08 10:21:41.366818",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_cwg0",
+  "title",
+  "farm_managers_name",
+  "unitdivision",
+  "column_break_uluq",
+  "company",
+  "business_unit",
+  "posting_date",
+  "stage",
+  "amended_from",
+  "section_break_ocrn",
+  "task_request_details",
+  "estimated_cost",
+  "total_workers"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_cwg0",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "farm_managers_name",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Farm Manager's Name",
+   "options": "Employee",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "farm_managers_name.custom_farm",
+   "fieldname": "unitdivision",
+   "fieldtype": "Data",
+   "label": "Unit/Division",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_uluq",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "farm_managers_name.custom_business_unit",
+   "fieldname": "business_unit",
+   "fieldtype": "Data",
+   "label": "Business Unit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Posting Date",
+   "reqd": 1
+  },
+  {
+   "default": "Requested",
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stage",
+   "options": "Requested\nPlanned\nAssigned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Task Work Request",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "section_break_ocrn",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "task_request_details",
+   "fieldtype": "Table",
+   "label": "Task Request Details",
+   "options": "Task Request"
+  },
+  {
+   "fieldname": "estimated_cost",
+   "fieldtype": "Currency",
+   "label": "Estimated Cost",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_workers",
+   "fieldtype": "Int",
+   "label": "Total Workers",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "farm_managers_name.company",
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "label": "Company",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [
+  {
+   "group": "Task Work",
+   "label": "Plans",
+   "link_doctype": "Task Work Plan",
+   "link_fieldname": "task_work_request_ref"
+  },
+  {
+   "group": "Task Work",
+   "label": "Assignments",
+   "link_doctype": "Task Work Assignment",
+   "link_fieldname": "task_work_request"
+  }
+ ],
+ "modified": "2025-10-12 12:13:52.439417",
+ "modified_by": "Administrator",
+ "module": "Kaitet Taskwork",
+ "name": "Task Work Request",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1,0 +1,239 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-02-24 09:07:01.927247",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_personal_information",
+  "first_name",
+  "second_name",
+  "col_break_personal",
+  "last_name",
+  "full_name",
+  "section_identification",
+  "id_number",
+  "date_of_birth",
+  "gender",
+  "col_break_identification",
+  "phone",
+  "photo",
+  "status",
+  "section_payment_details",
+  "payment_method",
+  "section_banking_details",
+  "bank_name",
+  "branch_name",
+  "col_break_banking",
+  "account_number",
+  "account_name",
+  "section_mpesa_details",
+  "mpesa_phone",
+  "mpesa_name",
+  "naming_series"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "TW-.YYYY.-",
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "section_personal_information",
+   "fieldtype": "Section Break",
+   "label": "Personal Information"
+  },
+  {
+   "bold": 1,
+   "fieldname": "first_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "First Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "second_name",
+   "fieldtype": "Data",
+   "label": "Second Name / Middle Name"
+  },
+  {
+   "fieldname": "col_break_personal",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "fieldname": "last_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Last Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "label": "Full Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_identification",
+   "fieldtype": "Section Break",
+   "label": "Identification"
+  },
+  {
+   "fieldname": "id_number",
+   "fieldtype": "Data",
+   "label": "ID Number / Passport"
+  },
+  {
+   "fieldname": "date_of_birth",
+   "fieldtype": "Date",
+   "label": "Date of Birth"
+  },
+  {
+   "fieldname": "gender",
+   "fieldtype": "Select",
+   "label": "Gender",
+   "options": "\nMale\nFemale\nOther"
+  },
+  {
+   "fieldname": "col_break_identification",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Phone",
+   "label": "Phone Number",
+   "options": "Kenya",
+   "reqd": 1
+  },
+  {
+   "fieldname": "photo",
+   "fieldtype": "Attach Image",
+   "label": "Photo"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Active\nInactive\nSuspended"
+  },
+  {
+   "fieldname": "section_payment_details",
+   "fieldtype": "Section Break",
+   "label": "Payment Details"
+  },
+  {
+   "default": "Bank Transfer",
+   "fieldname": "payment_method",
+   "fieldtype": "Select",
+   "label": "Payment Method",
+   "options": "Bank Transfer\nM-Pesa",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.payment_method=='Bank Transfer'",
+   "fieldname": "section_banking_details",
+   "fieldtype": "Section Break",
+   "label": "Banking Details"
+  },
+  {
+   "fieldname": "bank_name",
+   "fieldtype": "Link",
+   "label": "Bank Name",
+   "mandatory_depends_on": "eval:doc.payment_method=='Bank Transfer'",
+   "options": "Bank"
+  },
+  {
+   "fieldname": "branch_name",
+   "fieldtype": "Data",
+   "label": "Branch Name"
+  },
+  {
+   "fieldname": "col_break_banking",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "account_number",
+   "fieldtype": "Data",
+   "label": "Account Number",
+   "mandatory_depends_on": "eval:doc.payment_method=='Bank Transfer'"
+  },
+  {
+   "fieldname": "account_name",
+   "fieldtype": "Data",
+   "label": "Account Name"
+  },
+  {
+   "depends_on": "eval:doc.payment_method=='M-Pesa'",
+   "fieldname": "section_mpesa_details",
+   "fieldtype": "Section Break",
+   "label": "M-Pesa Details"
+  },
+  {
+   "fieldname": "mpesa_phone",
+   "fieldtype": "Phone",
+   "label": "M-Pesa Phone Number",
+   "mandatory_depends_on": "eval:doc.payment_method=='M-Pesa'",
+   "options": "Kenya"
+  },
+  {
+   "fieldname": "mpesa_name",
+   "fieldtype": "Data",
+   "label": "M-Pesa Registered Name"
+  }
+ ],
+ "image_field": "photo",
+ "links": [
+  {
+   "group": "Task Work",
+   "link_doctype": "Task Work Plan",
+   "link_fieldname": "task_worker",
+   "table_fieldname": "entries"
+  },
+  {
+   "group": "Task Work",
+   "link_doctype": "Task Work Assignment",
+   "link_fieldname": "employee_name",
+   "table_fieldname": "worker_assignments"
+  },
+  {
+   "group": "Payments",
+   "link_doctype": "TW Weekly Disbursement",
+   "link_fieldname": "task_worker",
+   "table_fieldname": "disbursement_entries"
+  }
+ ],
+ "modified": "2026-02-24 11:58:58.547241",
+ "modified_by": "teddy@upande.com",
+ "module": "Kaitet Taskwork",
+ "name": "Task Worker",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "full_name,id_number,phone",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "full_name",
+ "track_changes": 1
+}

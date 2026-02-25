@@ -1,0 +1,107 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-09-08 10:22:53.762135",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_atj1",
+  "task",
+  "uom",
+  "daily_target",
+  "rate",
+  "total_work",
+  "workers",
+  "days",
+  "estimated_cost",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_atj1",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "task",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Task",
+   "link_filters": "[[\"Task\",\"project\",\"!=\",\"Agriculture Tasks\"]]",
+   "options": "Task"
+  },
+  {
+   "fetch_from": "task.custom_uom",
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "UoM",
+   "options": "UOM"
+  },
+  {
+   "fetch_from": "task.custom_daily_target",
+   "fieldname": "daily_target",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Daily Target"
+  },
+  {
+   "fieldname": "total_work",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Total Work"
+  },
+  {
+   "fieldname": "workers",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Workers",
+   "read_only": 1
+  },
+  {
+   "fieldname": "days",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Days"
+  },
+  {
+   "fieldname": "estimated_cost",
+   "fieldtype": "Currency",
+   "label": "Estimated Cost",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Task Request",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "task.custom_unit_cost",
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Rate"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-09-23 02:00:42.085594",
+ "modified_by": "Administrator",
+ "module": "Kaitet Taskwork",
+ "name": "Task Request",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
