@@ -24,7 +24,13 @@
   "no_of_approved_workers",
   "approved_estimated_cost",
   "section_break_nlat",
-  "entries"
+  "entries",
+  "understaffed_tasks",
+  "total_workers_planned",
+  "section_break_dates",
+  "custom_expected_start_date",
+  "custom_expected_end_date",
+  "custom_location"
  ],
  "fields": [
   {
@@ -108,6 +114,42 @@
    "fieldtype": "Table",
    "label": "Entries",
    "options": "Task Plan"
+  },
+  {
+   "fieldname": "understaffed_tasks",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Understaffed Tasks",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_workers_planned",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Total Workers Planned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_dates",
+   "fieldtype": "Section Break",
+   "label": "Schedule"
+  },
+  {
+   "fieldname": "custom_expected_start_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Expected Start Date"
+  },
+  {
+   "fieldname": "custom_expected_end_date",
+   "fieldtype": "Date",
+   "label": "Expected End Date"
+  },
+  {
+   "fieldname": "custom_location",
+   "fieldtype": "Data",
+   "label": "Location"
   },
   {
    "fieldname": "task_work_request_ref",

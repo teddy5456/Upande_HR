@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"type\":\"onboarding\",\"data\":{\"onboarding_name\":\"Task Work\",\"col\":12}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"header\",\"data\":{\"text\":\"<h3>Masters</h3>\",\"col\":12}},{\"type\":\"card\",\"data\":{\"card_name\":\"Workers & Locations\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Task Work Operations\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Disbursements\",\"col\":4}}]",
+ "content": "[{\"type\":\"onboarding\",\"data\":{\"onboarding_name\":\"Task Work\",\"col\":12}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"header\",\"data\":{\"text\":\"<h3>Masters</h3>\",\"col\":12}},{\"type\":\"card\",\"data\":{\"card_name\":\"Workers & Locations\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Task Work Operations\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Disbursements\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"HR & Approvals\",\"col\":4}}]",
  "creation": "2026-02-23 08:00:00.000000",
  "doctype": "Workspace",
  "hide_custom": 0,
@@ -96,6 +96,25 @@
    "link_type": "DocType",
    "onboard": 1,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "HR & Approvals",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Employee Change Requests",
+   "link_count": 0,
+   "link_to": "TW Employee Change Request",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
   }
  ],
  "modified": "2026-02-24 00:00:00.000000",
@@ -126,6 +145,13 @@
    "doc_view": "List",
    "label": "Weekly Disbursements",
    "link_to": "TW Weekly Disbursement",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Change Requests",
+   "link_to": "TW Employee Change Request",
    "type": "DocType"
   }
  ],

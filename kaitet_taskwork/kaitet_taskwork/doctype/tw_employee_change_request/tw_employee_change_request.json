@@ -17,6 +17,7 @@
   "task",
   "column_break_2",
   "reason",
+  "selected_rows",
   "section_break_approval",
   "requested_by",
   "approved_by",
@@ -105,6 +106,14 @@
    "fieldtype": "Small Text",
    "label": "Reason for Change",
    "reqd": 1
+  },
+  {
+   "fieldname": "selected_rows",
+   "fieldtype": "Small Text",
+   "label": "Selected Rows",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "JSON array of Worker Assignment row names to replace. If blank, all replaceable rows for the employee are targeted."
   },
   {
    "fieldname": "section_break_approval",

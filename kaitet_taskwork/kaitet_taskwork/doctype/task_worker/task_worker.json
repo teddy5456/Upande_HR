@@ -1,11 +1,12 @@
 {
  "actions": [],
- "allow_rename": 1,
- "autoname": "naming_series:",
+ "allow_rename": 0,
+ "autoname": "custom",
  "creation": "2026-02-24 09:07:01.927247",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "payroll_number",
   "section_personal_information",
   "first_name",
   "second_name",
@@ -30,15 +31,18 @@
   "account_name",
   "section_mpesa_details",
   "mpesa_phone",
-  "mpesa_name",
-  "naming_series"
+  "mpesa_name"
  ],
  "fields": [
   {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "options": "TW-.YYYY.-",
+   "bold": 1,
+   "description": "5-digit payroll number. Leave blank to auto-generate a unique number.",
+   "fieldname": "payroll_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Payroll Number",
+   "read_only_depends_on": "eval:!doc.__islocal",
    "set_only_once": 1
   },
   {
@@ -213,7 +217,7 @@
  "modified_by": "teddy@upande.com",
  "module": "Kaitet Taskwork",
  "name": "Task Worker",
- "naming_rule": "By \"Naming Series\" field",
+ "naming_rule": "By autoname",
  "owner": "Administrator",
  "permissions": [
   {

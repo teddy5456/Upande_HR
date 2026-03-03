@@ -7,7 +7,21 @@
  "engine": "InnoDB",
  "field_order": [
   "task_worker",
-  "worker_name"
+  "worker_name",
+  "task_name",
+  "workers_required",
+  "workers_available",
+  "workers_assigned",
+  "understaffed",
+  "daily_target",
+  "adjusted_daily_target",
+  "total_work",
+  "rate",
+  "uom",
+  "payment_type",
+  "estimated_cost",
+  "start_date",
+  "end_date"
  ],
  "fields": [
   {
@@ -15,8 +29,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Task Worker",
-   "options": "Task Worker",
-   "reqd": 1
+   "options": "Task Worker"
   },
   {
    "fetch_from": "task_worker.full_name",
@@ -25,13 +38,93 @@
    "in_list_view": 1,
    "label": "Worker Name",
    "read_only": 1
+  },
+  {
+   "fieldname": "task_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Task Name"
+  },
+  {
+   "fieldname": "workers_required",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Workers Required"
+  },
+  {
+   "fieldname": "workers_available",
+   "fieldtype": "Int",
+   "label": "Workers Available",
+   "read_only": 1
+  },
+  {
+   "fieldname": "workers_assigned",
+   "fieldtype": "Int",
+   "label": "Workers Assigned",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "understaffed",
+   "fieldtype": "Check",
+   "label": "Understaffed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "daily_target",
+   "fieldtype": "Int",
+   "label": "Daily Target"
+  },
+  {
+   "fieldname": "adjusted_daily_target",
+   "fieldtype": "Int",
+   "label": "Adjusted Daily Target",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_work",
+   "fieldtype": "Int",
+   "label": "Total Work"
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "label": "Rate"
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "payment_type",
+   "fieldtype": "Select",
+   "label": "Payment Type",
+   "options": "\nPer Unit\nPer Day\nPer Task"
+  },
+  {
+   "fieldname": "estimated_cost",
+   "fieldtype": "Currency",
+   "label": "Estimated Cost",
+   "read_only": 1
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date"
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-02-23 00:00:00.000000",
+ "modified": "2026-03-03 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kaitet Taskwork",
  "name": "Task Plan",
