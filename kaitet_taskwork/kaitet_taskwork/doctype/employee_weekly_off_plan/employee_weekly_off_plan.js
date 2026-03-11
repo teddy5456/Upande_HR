@@ -103,18 +103,25 @@ function auto_revert_employee_holiday_list(frm) {
 frappe.ui.form.on('Weekly Offs', {
 	week_day: function(frm, cdt, cdn) {
 		let row = locals[cdt][cdn];
+		if (!row.week_day) return;
+		const year = new Date().getFullYear();
 		const mapping = {
-			'Monday':    'Kaitet Group 2025 (w/ Mondays)',
-			'Tuesday':   'Kaitet Group 2025 (w/ Tuesdays)',
-			'Wednesday': 'Kaitet Group 2025 (w/ Wednesdays)',
-			'Thursday':  'Kaitet Group 2025 (w/ Thursdays)',
-			'Friday':    'Kaitet Group 2025 (w/ Fridays)',
-			'Saturday':  'Kaitet Group 2025 (w/ Saturdays)',
-			'Sunday':    'Kaitet Group 2025 (w/ Sundays)'
+			'Monday':    `Kaitet Group ${year} (w/ Mondays)`,
+			'Tuesday':   `Kaitet Group ${year} (w/ Tuesdays)`,
+			'Wednesday': `Kaitet Group ${year} (w/ Wednesdays)`,
+			'Thursday':  `Kaitet Group ${year} (w/ Thursdays)`,
+			'Friday':    `Kaitet Group ${year} (w/ Fridays)`,
+			'Saturday':  `Kaitet Group ${year} (w/ Saturdays)`,
+			'Sunday':    `Kaitet Group ${year} (w/ Sundays)`
 		};
-		if (row.week_day) {
-			frappe.model.set_value(cdt, cdn, 'holiday_list', mapping[row.week_day]);
-		}
+		// Verify list exists before setting
+		frappe.db.exists('Holiday List', mapping[row.week_day]).then(exists => {
+			if (exists) {
+				frappe.model.set_value(cdt, cdn, 'holiday_list', mapping[row.week_day]);
+			} else {
+				frappe.msgprint(__(`Holiday list for ${year} not found. Please run the holiday list rollover first.`));
+			}
+		});
 	},
 
 	employee_name: function(frm, cdt, cdn) {

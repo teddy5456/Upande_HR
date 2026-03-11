@@ -7,6 +7,11 @@ from frappe.model.document import Document
 from frappe.utils import flt, today, getdate, add_days, date_diff, now_datetime
 import json
 
+from kaitet_taskwork.kaitet_taskwork.doctype.task_work_request.task_work_request import (
+    _get_users_for_role_and_company,
+    _send_to_user as _shared_send_to_user,
+)
+
 class TaskWorkPlan(Document):
     def validate(self):
         if self.task_work_request_ref:
@@ -156,7 +161,8 @@ class TaskWorkPlan(Document):
         subject_base = f"Task Work Plan: {self.name}"
 
         def notify_role(role, msg):
-            self._send_to_role(role, f"{subject_base} – {msg}", self._build_body(msg, doc_link))
+            self._send_to_role(role, f"{subject_base} – {msg}", self._build_body(msg, doc_link),
+                               company=self.company)
 
         def notify_owner(msg):
             self._send_to_user(self.owner, f"{subject_base} – {msg}", self._build_body(msg, doc_link))
@@ -182,29 +188,16 @@ class TaskWorkPlan(Document):
         if action:
             action()
     
-    def _send_to_role(self, role, subject, body):
-        """Send email to all users with given role"""
-        users = frappe.get_all(
-            "Has Role",
-            filters={"role": role},
-            pluck="parent"
-        )
-        users = list(set(users))
-        enabled = frappe.get_all("User", filters={"name": ["in", users], "enabled": 1}, pluck="name")
-        
-        for user in enabled:
+    def _send_to_role(self, role, subject, body, company=None):
+        """Send email to users with *role*, scoped to *company* when supplied."""
+        for user in _get_users_for_role_and_company(role, company):
             self._send_to_user(user, subject, body)
 
     def _send_to_user(self, user, subject, body):
         """Send email to specific user"""
         if not user:
             return
-            
-        email = frappe.db.get_value("User", user, "email") or user
-        try:
-            frappe.sendmail(recipients=[email], subject=subject, message=body, delayed=False)
-        except Exception:
-            frappe.log_error(frappe.get_traceback(), f"Task Work notification failed: {subject}")
+        _shared_send_to_user(user, subject, body)
 
     def _build_body(self, message, link):
         """Build email body"""

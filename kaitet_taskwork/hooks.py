@@ -16,6 +16,14 @@ add_to_apps_screen = [
 
 doc_events = {}
 
+scheduler_events = {
+	"daily": [
+		"kaitet_taskwork.kaitet_taskwork.doctype.employee_weekly_off_plan.employee_weekly_off_plan.revert_expired_weekly_off_plans",
+		"kaitet_taskwork.kaitet_taskwork.kaitet_taskwork.utils.rollover_holiday_lists",
+		"kaitet_taskwork.kaitet_taskwork.kaitet_taskwork.utils.process_security_guard_attendance",
+	]
+}
+
 fixtures = [
 	{
 		"dt": "Module Def",
@@ -23,6 +31,10 @@ fixtures = [
 	},
 	{
 		"dt": "Custom Field",
+		"filters": [["module", "=", "Kaitet Taskwork"]],
+	},
+	{
+		"dt": "Print Format",
 		"filters": [["module", "=", "Kaitet Taskwork"]],
 	},
 ]

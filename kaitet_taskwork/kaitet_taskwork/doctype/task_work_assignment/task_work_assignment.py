@@ -39,10 +39,28 @@ class TaskWorkAssignment(Document):
             frappe.db.set_value(
                 "Task Work Plan", self.task_work_plan, "stage", "Assigned"
             )
+        self._mark_workers_busy()
         self.create_notification("submitted")
 
     def on_cancel(self):
         self.db_set("stage", "Cancelled")
+        self._free_workers()
+
+    def _mark_workers_busy(self):
+        """Set current_assignment on every Task Worker in this assignment."""
+        workers = list({row.employee_name for row in self.worker_assignments if row.employee_name})
+        for worker in workers:
+            frappe.db.set_value("Task Worker", worker, "current_assignment", self.name)
+
+    def _free_workers(self):
+        """Clear current_assignment for all Task Workers linked to this assignment."""
+        busy = frappe.get_all(
+            "Task Worker",
+            filters={"current_assignment": self.name},
+            pluck="name",
+        )
+        for worker in busy:
+            frappe.db.set_value("Task Worker", worker, "current_assignment", None)
         
     def on_update_after_submit(self):
         self.update_stage()

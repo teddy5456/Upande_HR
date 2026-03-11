@@ -243,12 +243,23 @@ function load_worker_list(frm) {
 }
 
 function set_child_queries(frm) {
-    // Worker Assignments → employee_name — only workers from the plan
+    // Worker Assignments → employee_name
+    // Only show workers from the plan that are not currently assigned elsewhere.
+    // Workers whose current_assignment is this document are also included
+    // so existing rows remain valid while editing.
     frm.set_query('employee_name', 'worker_assignments', function() {
-        if (!frm._worker_list || !frm._worker_list.length) {
+        const worker_list = frm._worker_list || [];
+        if (!worker_list.length) {
             return { filters: [['Task Worker', 'name', '=', '']] };
         }
-        return { filters: [['Task Worker', 'name', 'in', frm._worker_list]] };
+        // free = no current_assignment, OR current_assignment is this document
+        const allowed_assignments = ['', frm.doc.name || ''];
+        return {
+            filters: [
+                ['Task Worker', 'name', 'in', worker_list],
+                ['Task Worker', 'current_assignment', 'in', allowed_assignments]
+            ]
+        };
     });
 
     // Worker Assignments → task — only tasks already in task_details

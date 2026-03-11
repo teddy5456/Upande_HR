@@ -5,6 +5,10 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from kaitet_taskwork.kaitet_taskwork.doctype.task_work_request.task_work_request import (
+    _get_users_for_role_and_company,
+)
+
 
 class BulkOvertimeRequisition(Document):
 	def validate(self):
@@ -52,7 +56,7 @@ class BulkOvertimeRequisition(Document):
 
 	def notify_hr_on_gm_approval(self):
 		"""Send notification to HR when General Manager approves the overtime request"""
-		hr_users = get_hr_users()
+		hr_users = get_hr_users(company=self.custom_company)
 
 		for user in hr_users:
 			frappe.publish_realtime(
@@ -123,21 +127,13 @@ class BulkOvertimeRequisition(Document):
 		)
 
 
-def get_hr_users():
-	"""Get list of users with HR Manager or HR User role"""
-	hr_users = frappe.get_all(
-		"Has Role",
-		filters={"role": ["in", ["HR Manager", "HR User"]]},
-		pluck="parent"
-	)
-	# Remove duplicates and filter for enabled users
-	hr_users = list(set(hr_users))
-	enabled_users = frappe.get_all(
-		"User",
-		filters={"name": ["in", hr_users], "enabled": 1},
-		pluck="name"
-	)
-	return enabled_users
+def get_hr_users(company=None):
+	"""Get enabled HR Manager / HR User accounts, scoped to *company* when given."""
+	# HR Manager is checked first (company-scoped via employee record)
+	hr_manager_users = _get_users_for_role_and_company("HR Manager", company)
+	# Also include HR User role users scoped to same company
+	hr_user_users = _get_users_for_role_and_company("HR User", company)
+	return list(set(hr_manager_users + hr_user_users))
 
 
 def create_notification(document, recipients, subject, message):

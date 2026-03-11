@@ -8,6 +8,9 @@ from frappe.utils import flt, today, getdate, add_days, now_datetime
 
 class TaskWorkRequest(Document):
     def validate(self):
+        # Reset stage when a cancelled document is amended (draft copy)
+        if self.amended_from and self.docstatus == 0:
+            self.stage = "Requested"
         self.validate_dates()
         self.calculate_totals()
         self.validate_workers()
@@ -88,7 +91,8 @@ class TaskWorkRequest(Document):
         subject_base = f"Task Work Request: {self.name}"
 
         def notify_role(role, msg):
-            self._send_to_role(role, f"{subject_base} – {msg}", self._build_body(msg, doc_link))
+            self._send_to_role(role, f"{subject_base} – {msg}", self._build_body(msg, doc_link),
+                               company=self.company)
 
         def notify_owner(msg):
             self._send_to_user(self.owner, f"{subject_base} – {msg}", self._build_body(msg, doc_link))
@@ -119,8 +123,8 @@ class TaskWorkRequest(Document):
         if action:
             action()
     
-    def _send_to_role(self, role, subject, body):
-        _send_to_role(role, subject, body)
+    def _send_to_role(self, role, subject, body, company=None):
+        _send_to_role(role, subject, body, company=company)
 
     def _send_to_user(self, user, subject, body):
         _send_to_user(user, subject, body)
@@ -129,12 +133,49 @@ class TaskWorkRequest(Document):
         return _build_body(self, message, link)
 
 
-def _send_to_role(role, subject, body):
-    """Send email to all users with given role"""
-    users = frappe.get_all("Has Role", filters={"role": role}, pluck="parent")
+# When a company-specific role exists for a base role, use it directly.
+# Otherwise, the base role's users are filtered by their employee's company.
+_COMPANY_ROLE_MAP = {
+    ("General Manager", "Kaitet Limited"): "General Manager Kaitet",
+}
+
+
+def _get_users_for_role_and_company(base_role, company=None):
+    """Return enabled users with *base_role*, scoped to *company*.
+
+    Priority:
+    1. A dedicated company-specific role exists in _COMPANY_ROLE_MAP  → use it.
+    2. Filter the base-role's users to those whose Employee record belongs
+       to *company*.
+    3. Fallback: return all enabled users with the base role when no
+       company-scoped match is found.
+    """
+    if company:
+        specific_role = _COMPANY_ROLE_MAP.get((base_role, company))
+        if specific_role:
+            users = frappe.get_all("Has Role", filters={"role": specific_role}, pluck="parent")
+            users = list(set(users))
+            return frappe.get_all("User", filters={"name": ["in", users], "enabled": 1}, pluck="name")
+
+    # All enabled users with the base role
+    users = frappe.get_all("Has Role", filters={"role": base_role}, pluck="parent")
     users = list(set(users))
     enabled = frappe.get_all("User", filters={"name": ["in", users], "enabled": 1}, pluck="name")
-    for user in enabled:
+
+    if not company:
+        return enabled
+
+    # Filter by the user's linked Employee company
+    company_users = [
+        u for u in enabled
+        if frappe.db.get_value("Employee", {"user_id": u}, "company") == company
+    ]
+    return company_users if company_users else enabled  # graceful fallback
+
+
+def _send_to_role(role, subject, body, company=None):
+    """Send email to users with *role*, limited to *company* when supplied."""
+    for user in _get_users_for_role_and_company(role, company):
         _send_to_user(user, subject, body)
 
 

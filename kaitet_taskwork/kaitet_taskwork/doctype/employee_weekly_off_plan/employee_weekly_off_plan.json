@@ -18,7 +18,8 @@
   "end_date",
   "section_break_hqmc",
   "weekly_offs",
-  "amended_from"
+  "amended_from",
+  "reverted"
  ],
  "fields": [
   {
@@ -85,6 +86,13 @@
    "label": "Title",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "reverted",
+   "fieldtype": "Check",
+   "label": "Reverted",
+   "read_only": 1
   },
   {
    "fetch_from": "manager.company",

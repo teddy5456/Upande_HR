@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "payroll_number",
+  "current_assignment",
   "section_personal_information",
   "first_name",
   "second_name",
@@ -44,6 +45,15 @@
    "label": "Payroll Number",
    "read_only_depends_on": "eval:!doc.__islocal",
    "set_only_once": 1
+  },
+  {
+   "fieldname": "current_assignment",
+   "fieldtype": "Link",
+   "label": "Current Assignment",
+   "options": "Task Work Assignment",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
   },
   {
    "fieldname": "section_personal_information",
@@ -229,6 +239,42 @@
    "read": 1,
    "report": 1,
    "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "General Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
    "share": 1,
    "write": 1
   }

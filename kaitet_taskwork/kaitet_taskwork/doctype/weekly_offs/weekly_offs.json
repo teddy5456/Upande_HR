@@ -11,7 +11,8 @@
   "week_day",
   "category",
   "unitdivision",
-  "holiday_list"
+  "holiday_list",
+  "previous_holiday_list"
  ],
  "fields": [
   {
@@ -60,6 +61,14 @@
    "label": "Holiday List",
    "options": "Holiday List",
    "read_only": 1
+  },
+  {
+   "fieldname": "previous_holiday_list",
+   "fieldtype": "Link",
+   "label": "Previous Holiday List",
+   "options": "Holiday List",
+   "read_only": 1,
+   "hidden": 1
   }
  ],
  "grid_page_length": 50,
