@@ -27,7 +27,6 @@
    "fieldtype": "Section Break"
   },
   {
-   "fetch_from": "manager_name.employee_number",
    "fieldname": "manager",
    "fieldtype": "Link",
    "in_list_view": 1,

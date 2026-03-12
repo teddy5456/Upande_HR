@@ -9,55 +9,26 @@ frappe.ui.form.on('Task Work Assignment', {
     refresh: function(frm) {
         set_stage_indicator(frm);
         render_connections(frm);
+
+        // Add buttons immediately — never depend on async
+        show_action_buttons(frm);
         set_child_queries(frm);
 
-        if (frm.doc.docstatus === 0) {
-            // Smart Auto-Assign button
-            frm.add_custom_button(__('Auto Assign Workers'), () => auto_assign_workers(frm))
-                .addClass('btn-primary');
-
-            frm.add_custom_button(__('Smart Assign'), () => perform_smart_assign(frm));
-
-            frm.add_custom_button(__('Calculate Payments'), () => calculate_payments(frm));
-            
-            frm.add_custom_button(__('Validate Schedule'), () => validate_schedule(frm));
-            
-            frm.add_custom_button(__('Add Employee'), () => request_employee_change(frm, 'Add Employee'));
-
-            if (frm.fields_dict['worker_assignments']) {
-                frm.fields_dict['worker_assignments'].grid.add_custom_button(
-                    __('Replace Selected'), () => {
-                        const selected = frm.fields_dict['worker_assignments'].grid.get_selected_children();
-                        if (!selected.length) {
-                            frappe.msgprint(__('Select a row in the Worker Assignments table first.'));
-                            return;
-                        }
-                        request_employee_change(frm, 'Replace Employee', selected[0].employee_name);
-                    }
-                );
-            }
-        }
-
-        // Load worker list from plan
+        // Load worker list in background to refresh the query filter
         if (frm.doc.task_work_plan) {
-            load_worker_list(frm);
+            load_worker_list(frm).then(() => set_child_queries(frm));
         }
-        
-        // Show payment summary if available
+
         if (frm.doc.total_estimated_cost > 0) {
             frm.dashboard.add_indicator(
-                __('Total Payment: {0}', [format_currency(frm.doc.total_estimated_cost)]),
+                __('Total Payment: {0}', [frappe.format_value(frm.doc.total_estimated_cost, { fieldtype: 'Currency' })]),
                 'blue'
             );
         }
-        
-        // Show assignment count
-        let assignment_count = (frm.doc.worker_assignments || []).length;
+
+        const assignment_count = (frm.doc.worker_assignments || []).length;
         if (assignment_count > 0) {
-            frm.dashboard.add_indicator(
-                __('{0} assignments', [assignment_count]),
-                'green'
-            );
+            frm.dashboard.add_indicator(__('{0} assignments', [assignment_count]), 'green');
         }
     },
 
@@ -240,6 +211,33 @@ function load_worker_list(frm) {
             )];
         }
     });
+}
+
+function show_action_buttons(frm) {
+    // Read-only actions available on all states
+    frm.add_custom_button(__('Calculate Payments'), () => calculate_payments(frm));
+    frm.add_custom_button(__('Validate Schedule'), () => validate_schedule(frm));
+
+    // Edit actions only on draft
+    if (frm.doc.docstatus === 0) {
+        frm.add_custom_button(__('Auto Assign Workers'), () => auto_assign_workers(frm))
+            .addClass('btn-primary');
+        frm.add_custom_button(__('Smart Assign'), () => perform_smart_assign(frm));
+        frm.add_custom_button(__('Add Employee'), () => request_employee_change(frm, 'Add Employee'));
+
+        if (frm.fields_dict['worker_assignments']) {
+            frm.fields_dict['worker_assignments'].grid.add_custom_button(
+                __('Replace Selected'), () => {
+                    const selected = frm.fields_dict['worker_assignments'].grid.get_selected_children();
+                    if (!selected.length) {
+                        frappe.msgprint(__('Select a row in the Worker Assignments table first.'));
+                        return;
+                    }
+                    request_employee_change(frm, 'Replace Employee', selected[0].employee_name);
+                }
+            );
+        }
+    }
 }
 
 function set_child_queries(frm) {
@@ -926,43 +924,37 @@ function render_connections(frm) {
     const plan = frm.doc.task_work_plan;
     if (!req && !plan) return;
 
-    const queries = [];
-    if (req) queries.push(frappe.db.get_value('Task Work Request', req, ['title', 'stage']));
-    if (plan) queries.push(frappe.db.get_value('Task Work Plan', plan, ['title', 'stage']));
-
-    Promise.all(queries).then(results => {
-        let i = 0;
-        const req_d = req ? results[i++].message : null;
-        const plan_d = plan ? results[i++].message : null;
-
-        const pill = function(stage) {
-            const c = { 
-                Requested: 'grey', 
-                Planned: 'blue', 
-                Assigned: 'green',
-                'In Progress': 'orange', 
-                Completed: 'green', 
-                Pending: 'grey' 
-            };
-            return `<span class="indicator-pill ${c[stage] || 'grey'}"
-                    style="font-size:10px;padding:1px 6px;">${stage || ''}</span>`;
-        };
-
-        const row = function(label, name, path, stage) {
-            return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-                <span class="text-muted" style="font-size:10px;font-weight:600;min-width:70px;">${label}</span>
-                <a href="${path}">${frappe.utils.icon('file', 'xs')} ${name}</a>
-                ${pill(stage)}
-            </div>`;
-        };
-
-        const html = `<div style="padding:4px 0;">
-            ${req ? row('REQUEST', req, `/app/task-work-request/${encodeURIComponent(req)}`, req_d && req_d.stage) : ''}
-            ${plan ? row('PLAN', plan, `/app/task-work-plan/${encodeURIComponent(plan)}`, plan_d && plan_d.stage) : ''}
+    const colour_map = {
+        Requested: 'grey', Planned: 'blue', Assigned: 'green',
+        'In Progress': 'orange', Completed: 'green', Pending: 'grey'
+    };
+    const pill = stage => `<span class="indicator-pill ${colour_map[stage] || 'grey'}"
+        style="font-size:10px;padding:1px 6px;">${stage || ''}</span>`;
+    const row = (label, name, path, stage) =>
+        `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span class="text-muted" style="font-size:10px;font-weight:600;min-width:70px;">${label}</span>
+            <a href="${path}">${frappe.utils.icon('file', 'xs')} ${name}</a>
+            ${pill(stage)}
         </div>`;
 
+    const fetches = [];
+    if (req) fetches.push(frappe.xcall('frappe.client.get_value', {
+        doctype: 'Task Work Request', fieldname: ['title', 'stage'], filters: { name: req }
+    }));
+    if (plan) fetches.push(frappe.xcall('frappe.client.get_value', {
+        doctype: 'Task Work Plan', fieldname: ['title', 'stage'], filters: { name: plan }
+    }));
+
+    Promise.all(fetches).then(results => {
+        let i = 0;
+        const req_d  = req  ? results[i++] : null;
+        const plan_d = plan ? results[i++] : null;
+        const html = `<div style="padding:4px 0;">
+            ${req  ? row('REQUEST', req,  `/app/task-work-request/${encodeURIComponent(req)}`,  req_d  && req_d.stage)  : ''}
+            ${plan ? row('PLAN',    plan, `/app/task-work-plan/${encodeURIComponent(plan)}`,     plan_d && plan_d.stage) : ''}
+        </div>`;
         frm.dashboard.add_section(html, __('Connections'));
-    });
+    }).catch(() => {});
 }
 
 function set_stage_indicator(frm) {

@@ -22,12 +22,21 @@ frappe.ui.form.on('Employee Weekly Off Plan', {
 	},
 
 	manager: function(frm) {
-		if (frm.doc.manager) {
-			frappe.model.with_doc('Employee', frm.doc.manager, function() {
-				let employee = frappe.model.get_doc('Employee', frm.doc.manager);
-				frm.set_value('manager_name', employee.employee_name);
+		if (!frm.doc.manager) return;
+
+		// If manager field has a full name (not an ID), look up the employee by name
+		frappe.db.get_value('Employee', { employee_name: frm.doc.manager }, 'name').then(r => {
+			if (r && r.message && r.message.name && r.message.name !== frm.doc.manager) {
+				frm.set_value('manager', r.message.name);
+				return;
+			}
+			// Normal path: fetch display name
+			frappe.db.get_value('Employee', frm.doc.manager, 'employee_name').then(res => {
+				if (res && res.message) {
+					frm.set_value('manager_name', res.message.employee_name);
+				}
 			});
-		}
+		});
 	},
 
 	status: function(frm) {
