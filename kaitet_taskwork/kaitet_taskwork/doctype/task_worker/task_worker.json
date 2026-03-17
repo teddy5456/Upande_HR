@@ -99,7 +99,8 @@
   {
    "fieldname": "id_number",
    "fieldtype": "Data",
-   "label": "ID Number / Passport"
+   "label": "ID Number / Passport",
+   "reqd": 1
   },
   {
    "fieldname": "date_of_birth",
@@ -120,8 +121,7 @@
    "fieldname": "phone",
    "fieldtype": "Phone",
    "label": "Phone Number",
-   "options": "Kenya",
-   "reqd": 1
+   "options": "Kenya"
   },
   {
    "fieldname": "photo",
