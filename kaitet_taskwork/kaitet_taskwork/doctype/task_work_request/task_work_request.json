@@ -19,7 +19,9 @@
   "section_break_ocrn",
   "task_request_details",
   "estimated_cost",
-  "total_workers"
+  "total_workers",
+  "section_break_suggestions",
+  "suggested_employees"
  ],
  "fields": [
   {
@@ -108,6 +110,18 @@
    "fieldtype": "Int",
    "label": "Total Workers",
    "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_suggestions",
+   "fieldtype": "Section Break",
+   "label": "Suggested Workers"
+  },
+  {
+   "fieldname": "suggested_employees",
+   "fieldtype": "Table",
+   "label": "Suggested Workers",
+   "options": "TW Suggested Employee"
   },
   {
    "fetch_from": "farm_managers_name.company",

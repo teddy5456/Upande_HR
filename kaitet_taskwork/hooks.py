@@ -16,6 +16,15 @@ add_to_apps_screen = [
 
 doc_events = {}
 
+# Restrict list/search results to the current user's company.
+# System Managers bypass these conditions and see everything.
+permission_query_conditions = {
+	"Task Work Request":    "kaitet_taskwork.kaitet_taskwork.permissions.conditions_task_work_request",
+	"Task Work Plan":       "kaitet_taskwork.kaitet_taskwork.permissions.conditions_task_work_plan",
+	"Task Work Assignment": "kaitet_taskwork.kaitet_taskwork.permissions.conditions_task_work_assignment",
+	"TW Weekly Disbursement": "kaitet_taskwork.kaitet_taskwork.permissions.conditions_tw_weekly_disbursement",
+}
+
 scheduler_events = {
 	"daily": [
 		"kaitet_taskwork.kaitet_taskwork.doctype.employee_weekly_off_plan.employee_weekly_off_plan.revert_expired_weekly_off_plans",

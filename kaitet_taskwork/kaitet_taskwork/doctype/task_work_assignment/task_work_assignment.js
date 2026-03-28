@@ -214,29 +214,26 @@ function load_worker_list(frm) {
 }
 
 function show_action_buttons(frm) {
-    // Read-only actions available on all states
-    frm.add_custom_button(__('Calculate Payments'), () => calculate_payments(frm));
-    frm.add_custom_button(__('Validate Schedule'), () => validate_schedule(frm));
+    // Grouped view/report actions
+    frm.add_custom_button(__('Calculate Payments'), () => calculate_payments(frm), __('View'));
+    frm.add_custom_button(__('Validate Schedule'),  () => validate_schedule(frm),  __('View'));
 
     // Edit actions only on draft
     if (frm.doc.docstatus === 0) {
-        frm.add_custom_button(__('Auto Assign Workers'), () => auto_assign_workers(frm))
+        frm.add_custom_button(__('Smart Assign'), () => perform_smart_assign(frm))
             .addClass('btn-primary');
-        frm.add_custom_button(__('Smart Assign'), () => perform_smart_assign(frm));
-        frm.add_custom_button(__('Add Employee'), () => request_employee_change(frm, 'Add Employee'));
-
-        if (frm.fields_dict['worker_assignments']) {
-            frm.fields_dict['worker_assignments'].grid.add_custom_button(
-                __('Replace Selected'), () => {
-                    const selected = frm.fields_dict['worker_assignments'].grid.get_selected_children();
-                    if (!selected.length) {
-                        frappe.msgprint(__('Select a row in the Worker Assignments table first.'));
-                        return;
-                    }
-                    request_employee_change(frm, 'Replace Employee', selected[0].employee_name);
+        frm.add_custom_button(__('Add Employee'),
+            () => request_employee_change(frm, 'Add Employee'), __('Workers'));
+        frm.add_custom_button(__('Replace Employee'),
+            () => {
+                const grid = frm.fields_dict['worker_assignments'] && frm.fields_dict['worker_assignments'].grid;
+                const selected = grid ? grid.get_selected_children() : [];
+                if (!selected.length) {
+                    frappe.msgprint(__('Select a row in Worker Assignments first, then click Replace Employee.'));
+                    return;
                 }
-            );
-        }
+                request_employee_change(frm, 'Replace Employee', selected[0].employee_name);
+            }, __('Workers'));
     }
 }
 
@@ -348,8 +345,22 @@ function auto_assign_workers(frm) {
 }
 
 function perform_auto_assignment(frm, workers) {
-    // Clear existing assignments
+    // Preserve manually-assigned rows
+    const locked_rows = (frm.doc.worker_assignments || []).filter(r => r.manually_assigned);
+    const locked_keys = new Set(
+        locked_rows.map(r => `${r.task}::${r.assignment_date}::${r.employee_name}`)
+    );
     frm.clear_table('worker_assignments');
+    locked_rows.forEach(lr => {
+        const row = frm.add_child('worker_assignments');
+        Object.assign(row, {
+            employee_name: lr.employee_name, task: lr.task, uom: lr.uom,
+            daily_target: lr.daily_target, quantity_assigned: lr.quantity_assigned,
+            rate: lr.rate, total_assigned_cost: lr.total_assigned_cost,
+            assignment_date: lr.assignment_date, days: lr.days,
+            location: lr.location, manually_assigned: 1,
+        });
+    });
     
     let assignment_plan = [];
     let current_date = new Date(frm.doc.start_date);
@@ -403,16 +414,19 @@ function perform_auto_assignment(frm, workers) {
                     continue;
                 }
                 
+                // Skip if a manually-assigned row owns this slot
+                if (locked_keys.has(`${task.task}::${date_str}::${worker}`)) continue;
+
                 workers_today.push(worker);
-                
+
                 // Track worker assignment per day
                 if (!worker_assignments_per_day[date_str]) {
                     worker_assignments_per_day[date_str] = [];
                 }
                 worker_assignments_per_day[date_str].push(worker);
-                
+
                 let worker_qty = Math.min(daily_target, work_remaining);
-                
+
                 // Create assignment
                 let row = frm.add_child('worker_assignments');
                 row.employee_name = worker;
@@ -423,6 +437,7 @@ function perform_auto_assignment(frm, workers) {
                 row.quantity_assigned = worker_qty;
                 row.total_assigned_cost = flt(task.rate * worker_qty, 2);
                 row.assignment_date = date_str;
+                row.manually_assigned = 0;
                 
                 workers_used.add(worker);
                 work_remaining -= worker_qty;
@@ -863,43 +878,66 @@ function calculate_payments(frm) {
 }
 
 function request_employee_change(frm, change_type, old_employee) {
-    const fields = [
-        {
-            fieldtype: 'Link', fieldname: 'new_employee',
-            label: 'New Employee', options: 'Task Worker', reqd: 1
-        },
-        {
-            fieldtype: 'Link', fieldname: 'task',
-            label: 'Limit to Task (optional)', options: 'Task'
-        },
-        {
-            fieldtype: 'Small Text', fieldname: 'reason',
-            label: 'Reason for Change', reqd: 1
-        }
-    ];
+    if (frm.is_new()) {
+        frappe.msgprint(__('Save the document first before submitting a change request.'));
+        return;
+    }
 
-    if (change_type === 'Replace Employee' && old_employee) {
-        fields.unshift({
+    // Build task options from this assignment's task_details only
+    const task_options = (frm.doc.task_details || []).map(t => ({
+        label: t.task_name || t.task,
+        value: t.task
+    }));
+    if (!task_options.length) {
+        frappe.msgprint(__('No tasks found on this assignment. Link a Task Work Request first.'));
+        return;
+    }
+
+    const is_replace = change_type === 'Replace Employee';
+    const fields = [];
+
+    if (is_replace && old_employee) {
+        fields.push({
             fieldtype: 'Data', fieldname: 'old_employee_display',
             label: 'Employee Being Replaced', read_only: 1,
             default: old_employee
         });
     }
 
+    fields.push(
+        {
+            fieldtype: 'Link', fieldname: 'new_employee',
+            label: 'New Worker', options: 'Task Worker', reqd: 1
+        },
+        {
+            // Show task names as "ID: Name" pairs so the planner can pick correctly
+            fieldtype: 'Select', fieldname: 'task',
+            label: is_replace ? 'Task to Reassign' : 'Task (optional)',
+            options: [''].concat(task_options.map(o => o.value)),
+            description: task_options.map(o => `${o.value} → ${o.label}`).join('  |  ')
+        },
+        {
+            fieldtype: 'Small Text', fieldname: 'reason',
+            label: 'Reason for Change', reqd: 1
+        }
+    );
+
     frappe.prompt(
         fields,
         function(vals) {
+            if (!vals.new_employee) return;
+
             frappe.call({
                 method: 'frappe.client.insert',
                 args: {
                     doc: {
-                        doctype: 'TW Employee Change Request',
+                        doctype:              'TW Employee Change Request',
                         task_work_assignment: frm.doc.name,
-                        change_type: change_type,
-                        old_employee: change_type === 'Replace Employee' ? old_employee : null,
-                        new_employee: vals.new_employee,
-                        task: vals.task || null,
-                        reason: vals.reason
+                        change_type:          change_type,
+                        old_employee:         is_replace ? old_employee : null,
+                        new_employee:         vals.new_employee,
+                        task:                 vals.task || null,
+                        reason:               vals.reason
                     }
                 },
                 callback: function(r) {
@@ -978,7 +1016,71 @@ function perform_smart_assign(frm) {
         return;
     }
 
+    // Load suggestions from the plan before running, so we can honour
+    // manager-suggested task→worker pairings
+    if (frm.doc.task_work_plan) {
+        frappe.call({
+            method: 'frappe.client.get',
+            args: { doctype: 'Task Work Plan', name: frm.doc.task_work_plan },
+            callback: function(r) {
+                const suggestions = (r.message && r.message.suggested_employees) || [];
+                _run_smart_assign(frm, workers, suggestions);
+            }
+        });
+    } else {
+        _run_smart_assign(frm, workers, []);
+    }
+}
+
+function _run_smart_assign(frm, workers, suggestions) {
+    // Build task → [suggested workers] map from manager suggestions
+    // Only suggestions that have a specific task are used as task-pinned;
+    // suggestions without a task just join the general pool.
+    const task_suggestions = {};   // task_id → ordered array of worker IDs
+    const suggested_pool   = [];   // workers suggested without a specific task
+    suggestions.forEach(s => {
+        if (s.task_worker) {
+            if (s.task) {
+                if (!task_suggestions[s.task]) task_suggestions[s.task] = [];
+                if (!task_suggestions[s.task].includes(s.task_worker))
+                    task_suggestions[s.task].push(s.task_worker);
+            } else {
+                if (!suggested_pool.includes(s.task_worker))
+                    suggested_pool.push(s.task_worker);
+            }
+        }
+    });
+
+    // Combine suggestion pool with plan workers (suggestions first for priority)
+    const all_workers = [...new Set([...suggested_pool, ...workers])];
+
+    // Preserve rows that were manually assigned OR already have actual work recorded
+    const locked_rows = (frm.doc.worker_assignments || []).filter(
+        r => r.manually_assigned || flt(r.actual_quantity) > 0
+    );
+    const locked_keys = new Set(
+        locked_rows.map(r => `${r.task}::${r.assignment_date}::${r.employee_name}`)
+    );
+
     frm.clear_table('worker_assignments');
+
+    // Re-add the locked rows first so they survive the clear
+    locked_rows.forEach(lr => {
+        const row = frm.add_child('worker_assignments');
+        Object.assign(row, {
+            employee_name:       lr.employee_name,
+            task:                lr.task,
+            uom:                 lr.uom,
+            daily_target:        lr.daily_target,
+            quantity_assigned:   lr.quantity_assigned,
+            rate:                lr.rate,
+            total_assigned_cost: lr.total_assigned_cost,
+            assignment_date:     lr.assignment_date,
+            days:                lr.days,
+            location:            lr.location,
+            manually_assigned:   1,
+        });
+    });
 
     let rot_idx = 0;
     const summary = [];
@@ -991,7 +1093,11 @@ function perform_smart_assign(frm) {
         const rate         = flt(td.rate);
         if (!total_work) return;
 
-        const max_per_day  = workers.length * daily_target;
+        // For this task: pinned suggestions go first, then general rotation
+        const pinned   = task_suggestions[td.task] || [];
+        const task_pool = [...new Set([...pinned, ...all_workers])];
+
+        const max_per_day  = task_pool.length * daily_target;
         const days_needed  = Math.ceil(total_work / max_per_day);
         let work_left      = total_work;
         const task_start   = new Date(current_date);
@@ -1001,10 +1107,15 @@ function perform_smart_assign(frm) {
             const day_date      = new Date(task_start);
             day_date.setDate(day_date.getDate() + day);
             const work_today    = Math.min(work_left, max_per_day);
-            const workers_today = Math.min(Math.ceil(work_today / daily_target), workers.length);
+            const workers_today = Math.min(Math.ceil(work_today / daily_target), task_pool.length);
 
             for (let i = 0; i < workers_today && work_left > 0; i++) {
-                const emp = workers[rot_idx % workers.length];
+                const emp = task_pool[rot_idx % task_pool.length];
+                rot_idx++;
+
+                const date_str = frappe.datetime.obj_to_str(day_date);
+                if (locked_keys.has(`${td.task}::${date_str}::${emp}`)) continue;
+
                 const qty = flt(Math.min(daily_target, work_left), 2);
 
                 const row = frm.add_child('worker_assignments');
@@ -1016,24 +1127,25 @@ function perform_smart_assign(frm) {
                 row.days                = 1;
                 row.quantity_assigned   = qty;
                 row.total_assigned_cost = flt(rate * qty, 2);
-                row.assignment_date     = frappe.datetime.obj_to_str(day_date);
+                row.assignment_date     = date_str;
+                row.manually_assigned   = 0;
 
                 used_workers.add(emp);
                 work_left -= qty;
-                rot_idx++;
             }
         }
 
         current_date.setDate(current_date.getDate() + days_needed);
 
         summary.push({
-            task: td.task_name || td.task,
-            needed: cint(td.workers) || 1,
-            used:   used_workers.size,
-            total:  total_work,
+            task:    td.task_name || td.task,
+            needed:  cint(td.workers) || 1,
+            used:    used_workers.size,
+            total:   total_work,
             per_day: max_per_day,
-            orig:   orig_days,
-            actual: days_needed
+            orig:    orig_days,
+            actual:  days_needed,
+            pinned:  pinned.length
         });
     });
 
@@ -1048,8 +1160,11 @@ function perform_smart_assign(frm) {
         const status = diff > 0 ? `<span class="text-danger">+${diff}d</span>` :
                        diff < 0 ? `<span class="text-success">${diff}d</span>` :
                        `<span class="text-success">On time</span>`;
+        const pinned_badge = s.pinned
+            ? `<span class="badge" style="background:#5e64ff;color:#fff">${s.pinned} suggested</span>`
+            : '';
         return `<tr>
-            <td>${s.task}</td><td>${s.needed}</td><td>${s.used}</td>
+            <td>${s.task} ${pinned_badge}</td><td>${s.needed}</td><td>${s.used}</td>
             <td>${s.total}</td><td>${s.per_day.toFixed(1)}</td>
             <td>${s.orig}</td><td>${s.actual}</td><td>${status}</td>
         </tr>`;
@@ -1065,7 +1180,7 @@ function perform_smart_assign(frm) {
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
-            <p class="text-muted small">Workers rotate across tasks. Someone finishing early frees capacity for the next task.</p>`,
+            <p class="text-muted small">Suggested workers are prioritised per task. Workers rotate for remaining capacity.</p>`,
         indicator: 'green', wide: true
     });
 }

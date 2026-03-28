@@ -144,11 +144,14 @@ def _get_users_for_role_and_company(base_role, company=None):
     """Return enabled users with *base_role*, scoped to *company*.
 
     Priority:
-    1. A dedicated company-specific role exists in _COMPANY_ROLE_MAP  → use it.
+    1. A dedicated company-specific role exists in _COMPANY_ROLE_MAP → use it.
     2. Filter the base-role's users to those whose Employee record belongs
        to *company*.
-    3. Fallback: return all enabled users with the base role when no
-       company-scoped match is found.
+    3. No company supplied → return all enabled users with the base role.
+
+    No cross-company fallback: if a company is specified and no matching
+    users are found, an empty list is returned so emails are never leaked
+    to users of a different company.
     """
     if company:
         specific_role = _COMPANY_ROLE_MAP.get((base_role, company))
@@ -165,12 +168,11 @@ def _get_users_for_role_and_company(base_role, company=None):
     if not company:
         return enabled
 
-    # Filter by the user's linked Employee company
-    company_users = [
+    # Filter by the user's linked Employee company — no cross-company fallback
+    return [
         u for u in enabled
-        if frappe.db.get_value("Employee", {"user_id": u}, "company") == company
+        if frappe.db.get_value("Employee", {"user_id": u, "status": "Active"}, "company") == company
     ]
-    return company_users if company_users else enabled  # graceful fallback
 
 
 def _send_to_role(role, subject, body, company=None):

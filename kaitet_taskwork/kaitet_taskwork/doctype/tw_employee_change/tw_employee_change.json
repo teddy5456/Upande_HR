@@ -1,0 +1,91 @@
+{
+ "actions": [],
+ "creation": "2026-03-28 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "change_date",
+  "task",
+  "old_employee",
+  "new_employee",
+  "column_break_twec",
+  "change_type",
+  "assignment_ref",
+  "changed_by",
+  "reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "change_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "task",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Task",
+   "options": "Task"
+  },
+  {
+   "fieldname": "old_employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Removed Worker",
+   "options": "Task Worker"
+  },
+  {
+   "fieldname": "new_employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Added Worker",
+   "options": "Task Worker",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_twec",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "change_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Type",
+   "options": "Add Employee\nReplace Employee"
+  },
+  {
+   "fieldname": "assignment_ref",
+   "fieldtype": "Link",
+   "label": "Assignment",
+   "options": "Task Work Assignment"
+  },
+  {
+   "fieldname": "changed_by",
+   "fieldtype": "Link",
+   "label": "Changed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-03-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kaitet Taskwork",
+ "name": "TW Employee Change",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

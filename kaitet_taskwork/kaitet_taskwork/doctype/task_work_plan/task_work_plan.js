@@ -53,6 +53,56 @@ frappe.ui.form.on('Task Work Plan', {
         }
 
         render_plan_summary(frm);
+
+        // Button: sync suggestions from the linked request
+        if (frm.doc.task_work_request_ref && frm.doc.docstatus === 0) {
+            frm.add_custom_button(__('Sync Suggestions from Request'), function() {
+                frappe.call({
+                    method: 'kaitet_taskwork.kaitet_taskwork.api.sync_suggestions_to_plan',
+                    args: { plan_name: frm.doc.name },
+                    callback: function(r) {
+                        if (r.message !== undefined) {
+                            frappe.show_alert({
+                                message: r.message
+                                    ? __('Added {0} suggestion(s) from request.', [r.message])
+                                    : __('No new suggestions to add.'),
+                                indicator: 'green'
+                            }, 4);
+                            frm.reload_doc();
+                        }
+                    }
+                });
+            }, __('Suggestions'));
+
+            // Button: add selected suggestions into the plan's worker entries
+            frm.add_custom_button(__('Use Selected Suggestions'), function() {
+                const selected = (frm.doc.suggested_employees || []).filter(s => s.selected);
+                if (!selected.length) {
+                    frappe.msgprint(__('Tick the "Use" checkbox on the suggestion rows you want to add first.'));
+                    return;
+                }
+                frappe.confirm(
+                    __('Add {0} selected worker(s) to the plan entries? They will be included in Smart Assign.', [selected.length]),
+                    function() {
+                        frappe.call({
+                            method: 'kaitet_taskwork.kaitet_taskwork.api.use_selected_suggestions',
+                            args: { plan_name: frm.doc.name },
+                            freeze: true,
+                            freeze_message: __('Adding workers to plan…'),
+                            callback: function(r) {
+                                frappe.show_alert({
+                                    message: r.message
+                                        ? __('{0} worker(s) added to plan entries. Smart Assign will now include them.', [r.message])
+                                        : __('No new workers added (already in entries).'),
+                                    indicator: 'green'
+                                }, 6);
+                                frm.reload_doc();
+                            }
+                        });
+                    }
+                );
+            }, __('Suggestions'));
+        }
     },
 
     // Load request details when reference is set

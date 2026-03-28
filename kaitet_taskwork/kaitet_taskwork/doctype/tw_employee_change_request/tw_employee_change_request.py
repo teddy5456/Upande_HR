@@ -2,14 +2,13 @@
 # For license information, please see license.txt
 
 import json
-import math
 
 import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, add_days, getdate, today
 from kaitet_taskwork.kaitet_taskwork.doctype.task_work_request.task_work_request import (
-	_send_to_role, _send_to_user, _build_body
+	_get_users_for_role_and_company,
 )
 
 
@@ -22,8 +21,6 @@ class TWEmployeeChangeRequest(Document):
 
 	def on_update(self):
 		self._send_notification()
-		if self.status == "Approved":
-			self._apply_change()
 
 	def _send_notification(self):
 		prev = self.get_doc_before_save()
@@ -35,10 +32,15 @@ class TWEmployeeChangeRequest(Document):
 		subject_base = f"Employee Change Request: {self.name}"
 
 		def notify_hr(msg):
-			_send_to_role("HR Manager", f"{subject_base} – {msg}", _build_body(self, msg, doc_link))
+			subject = f"{subject_base} – {msg}"
+			body = _build_body(self, msg, doc_link)
+			for user in _get_users_for_role_and_company("HR Manager"):
+				_send_tracked(user, subject, body, self.doctype, self.name)
 
 		def notify_requester(msg):
-			_send_to_user(self.requested_by, f"{subject_base} – {msg}", _build_body(self, msg, doc_link))
+			subject = f"{subject_base} – {msg}"
+			body = _build_body(self, msg, doc_link)
+			_send_tracked(self.requested_by, subject, body, self.doctype, self.name)
 
 		if self.status == "Pending HR Approval":
 			notify_hr(
@@ -52,13 +54,16 @@ class TWEmployeeChangeRequest(Document):
 				+ (f": {self.approval_notes}" if self.approval_notes else "")
 			)
 
+	# ------------------------------------------------------------------
+	# Change application (called from background queue after approval)
+	# ------------------------------------------------------------------
+
 	def _apply_change(self):
 		"""Apply the approved employee change to the Task Work Assignment."""
 		assignment = frappe.get_doc("Task Work Assignment", self.task_work_assignment)
 
 		if self.change_type == "Add Employee":
 			self._smart_assign_remaining(assignment)
-
 		elif self.change_type == "Replace Employee":
 			if not self.old_employee:
 				frappe.throw(_("Old Employee is required for Replace Employee change type."))
@@ -66,14 +71,9 @@ class TWEmployeeChangeRequest(Document):
 
 		assignment.flags.ignore_permissions = True
 		assignment.save()
-		frappe.msgprint(
-			_(f"Change applied to Task Work Assignment {self.task_work_assignment}."),
-			indicator="green"
-		)
 
 	def _smart_assign_remaining(self, assignment):
 		"""Assign remaining unallocated work across tasks to the new employee."""
-		# Sum already-assigned quantity per task
 		assigned_by_task = {}
 		latest_date_by_task = {}
 		for row in assignment.worker_assignments:
@@ -95,9 +95,7 @@ class TWEmployeeChangeRequest(Document):
 				continue
 
 			daily_target = flt(td.daily_target) or 1
-			rate         = flt(td.rate)
-
-			# Start the day after the latest existing row for this task
+			rate = flt(td.rate)
 			last_date = latest_date_by_task.get(td.task)
 			start = add_days(last_date, 1) if last_date else (assignment.start_date or today())
 
@@ -106,15 +104,16 @@ class TWEmployeeChangeRequest(Document):
 			while work_left > 0:
 				qty = flt(min(daily_target, work_left), 2)
 				assignment.append("worker_assignments", {
-					"employee_name": self.new_employee,
-					"task":              td.task,
-					"uom":               td.uom,
-					"daily_target":      daily_target,
-					"rate":              rate,
-					"quantity_assigned": qty,
+					"employee_name":       self.new_employee,
+					"task":                td.task,
+					"uom":                 td.uom,
+					"daily_target":        daily_target,
+					"rate":                rate,
+					"quantity_assigned":   qty,
 					"total_assigned_cost": flt(rate * qty, 2),
-					"days":              1,
-					"assignment_date":   add_days(start, day),
+					"days":                1,
+					"assignment_date":     add_days(start, day),
+					"manually_assigned":   1,
 				})
 				work_left -= qty
 				day += 1
@@ -124,8 +123,7 @@ class TWEmployeeChangeRequest(Document):
 			frappe.throw(_("No remaining work to assign — all tasks are already fully allocated."))
 
 	def _replace_worker(self, assignment):
-		"""Swap old_employee → new_employee on rows that have no actual work."""
-		# Parse specific row selection from the dialog (if provided)
+		"""Swap old_employee → new_employee on rows that have no actual work recorded."""
 		selected_names = None
 		if self.selected_rows:
 			try:
@@ -147,7 +145,6 @@ class TWEmployeeChangeRequest(Document):
 			        "quantity_assigned", "days", "location", "assignment_date"]
 		)
 
-		# Narrow to only the days the requester selected, if specified
 		old_row_names = (
 			[r for r in all_rows if r["name"] in selected_names]
 			if selected_names else all_rows
@@ -155,31 +152,89 @@ class TWEmployeeChangeRequest(Document):
 
 		if not old_row_names:
 			frappe.throw(_(
-				"No replaceable rows found for {0} — rows with recorded actual work cannot be replaced."
+				"No replaceable rows found for {0} — rows with actual work recorded cannot be replaced."
 			).format(self.old_employee))
 
-		# Build replacement rows
 		for r in old_row_names:
 			assignment.append("worker_assignments", {
-				"employee_name":     self.new_employee,
-				"task":              r["task"],
-				"uom":               r["uom"],
-				"rate":              r["rate"],
-				"daily_target":      r["daily_target"],
-				"quantity_assigned": r["quantity_assigned"],
+				"employee_name":       self.new_employee,
+				"task":                r["task"],
+				"uom":                 r["uom"],
+				"rate":                r["rate"],
+				"daily_target":        r["daily_target"],
+				"quantity_assigned":   r["quantity_assigned"],
 				"total_assigned_cost": flt(flt(r["rate"]) * flt(r["quantity_assigned"]), 2),
-				"days":              r["days"],
-				"location":          r["location"],
-				"assignment_date":   r["assignment_date"],
+				"days":                r["days"],
+				"location":            r["location"],
+				"assignment_date":     r["assignment_date"],
+				"manually_assigned":   1,
 			})
 
-		# Drop old rows
 		old_names = {r["name"] for r in old_row_names}
 		assignment.worker_assignments = [
 			row for row in assignment.worker_assignments
 			if row.name not in old_names
 		]
 
+
+# ---------------------------------------------------------------------------
+# Email helper — creates a Communication so emails appear in the timeline
+# ---------------------------------------------------------------------------
+
+def _send_tracked(user, subject, body, ref_doctype, ref_name):
+	"""Send email and record it as a Communication on the document timeline."""
+	if not user:
+		return
+	email = frappe.db.get_value("User", user, "email") or user
+	try:
+		frappe.sendmail(
+			recipients=[email],
+			subject=subject,
+			message=body,
+			delayed=True,                  # use queue — don't block the request
+			reference_doctype=ref_doctype,
+			reference_name=ref_name,
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"TW Change Request email failed: {subject}")
+
+
+def _build_body(doc, message, link):
+	return f"""
+		<p>Hello,</p>
+		<p><strong>{message}</strong></p>
+		<ul>
+			<li><strong>Request:</strong> {doc.name}</li>
+			<li><strong>Type:</strong> {doc.get('change_type') or ''}</li>
+			<li><strong>Assignment:</strong> {doc.get('task_work_assignment') or ''}</li>
+			<li><strong>Status:</strong> {doc.get('status') or ''}</li>
+		</ul>
+		<p><a href="{link}">View Request</a></p>
+		<p>Regards,<br>Upande HR System</p>
+	"""
+
+
+# ---------------------------------------------------------------------------
+# Background job — called via frappe.enqueue after approval
+# ---------------------------------------------------------------------------
+
+def _bg_apply_change(change_request_name):
+	"""Background worker: apply the approved change and notify the requester."""
+	frappe.set_user("Administrator")
+	doc = frappe.get_doc("TW Employee Change Request", change_request_name)
+	try:
+		doc._apply_change()
+		frappe.db.commit()
+	except Exception:
+		frappe.log_error(
+			frappe.get_traceback(),
+			f"Failed to apply employee change {change_request_name}"
+		)
+
+
+# ---------------------------------------------------------------------------
+# Whitelist API
+# ---------------------------------------------------------------------------
 
 @frappe.whitelist()
 def submit_for_approval(name):
@@ -203,9 +258,19 @@ def approve_request(name, notes=None):
 		doc.db_set("approval_notes", notes)
 	doc.db_set("status", "Approved")
 	doc.reload()
+
+	# Send notification immediately (fast — queued email)
 	doc._send_notification()
-	doc._apply_change()
-	return "ok"
+
+	# Apply the actual assignment change in a background worker so the
+	# browser gets a response right away instead of waiting for the save
+	frappe.enqueue(
+		"kaitet_taskwork.kaitet_taskwork.doctype.tw_employee_change_request.tw_employee_change_request._bg_apply_change",
+		change_request_name=name,
+		queue="short",
+		now=frappe.flags.in_test,          # run inline during tests
+	)
+	return "queued"
 
 
 @frappe.whitelist()

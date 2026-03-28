@@ -18,7 +18,8 @@
   "actual_quantity",
   "actual_cost",
   "achievement",
-  "location"
+  "location",
+  "manually_assigned"
  ],
  "fields": [
   {
@@ -104,6 +105,13 @@
    "fieldname": "location",
    "fieldtype": "Data",
    "label": "Location"
+  },
+  {
+   "default": "0",
+   "fieldname": "manually_assigned",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Manually Assigned"
   }
  ],
  "index_web_pages_for_search": 1,

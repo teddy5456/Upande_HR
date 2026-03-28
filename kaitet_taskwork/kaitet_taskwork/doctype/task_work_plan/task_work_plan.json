@@ -30,7 +30,11 @@
   "section_break_dates",
   "custom_expected_start_date",
   "custom_expected_end_date",
-  "custom_location"
+  "custom_location",
+  "section_break_suggestions",
+  "suggested_employees",
+  "section_break_empchanges",
+  "employee_changes"
  ],
  "fields": [
   {
@@ -150,6 +154,30 @@
    "fieldname": "custom_location",
    "fieldtype": "Data",
    "label": "Location"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_suggestions",
+   "fieldtype": "Section Break",
+   "label": "Suggested Employees"
+  },
+  {
+   "fieldname": "suggested_employees",
+   "fieldtype": "Table",
+   "label": "Suggested Employees",
+   "options": "TW Suggested Employee"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_empchanges",
+   "fieldtype": "Section Break",
+   "label": "Employee Changes"
+  },
+  {
+   "fieldname": "employee_changes",
+   "fieldtype": "Table",
+   "label": "Employee Changes",
+   "options": "TW Employee Change"
   },
   {
    "fieldname": "task_work_request_ref",

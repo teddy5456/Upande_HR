@@ -13,6 +13,8 @@ frappe.ui.form.on('TW Employee Change Request', {
 						frappe.call({
 							method: 'kaitet_taskwork.kaitet_taskwork.doctype.tw_employee_change_request.tw_employee_change_request.submit_for_approval',
 							args: { name: frm.doc.name },
+							freeze: true,
+							freeze_message: __('Submitting…'),
 							callback: () => frm.reload_doc()
 						});
 					}
@@ -28,7 +30,15 @@ frappe.ui.form.on('TW Employee Change Request', {
 						frappe.call({
 							method: 'kaitet_taskwork.kaitet_taskwork.doctype.tw_employee_change_request.tw_employee_change_request.approve_request',
 							args: { name: frm.doc.name, notes: vals.notes },
-							callback: () => frm.reload_doc()
+							freeze: true,
+							freeze_message: __('Approving…'),
+							callback: function(r) {
+								frm.reload_doc();
+								frappe.show_alert({
+									message: __('Approved. The assignment is being updated in the background — refresh the assignment in a moment.'),
+									indicator: 'green'
+								}, 8);
+							}
 						});
 					},
 					__('Approve Change Request'), __('Approve')
@@ -42,6 +52,8 @@ frappe.ui.form.on('TW Employee Change Request', {
 						frappe.call({
 							method: 'kaitet_taskwork.kaitet_taskwork.doctype.tw_employee_change_request.tw_employee_change_request.reject_request',
 							args: { name: frm.doc.name, notes: vals.notes },
+							freeze: true,
+							freeze_message: __('Rejecting…'),
 							callback: () => frm.reload_doc()
 						});
 					},

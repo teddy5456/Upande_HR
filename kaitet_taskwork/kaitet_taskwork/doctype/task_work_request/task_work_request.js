@@ -2,11 +2,39 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on('Task Work Request', {
+    onload: function(frm) {
+        // Fetch the current user's company once and apply link-field filters
+        frappe.call({
+            method: 'kaitet_taskwork.kaitet_taskwork.permissions.get_current_user_company',
+            callback: function(r) {
+                const company = r.message;
+                if (!company) return;  // System Manager or no Employee record — no restriction
+
+                // Filter farm manager to same company only
+                frm.set_query('farm_managers_name', function() {
+                    return { filters: { company: company, status: 'Active' } };
+                });
+
+                // Filter tasks in child rows to same company
+                frm.set_query('task', 'task_request_details', function() {
+                    return { filters: { company: company } };
+                });
+            }
+        });
+    },
+
     refresh: function(frm) {
         // Auto-populate posting date on new doc
         if (frm.is_new() && !frm.doc.posting_date) {
             frm.set_value('posting_date', frappe.datetime.now_datetime());
         }
+
+        // Limit task in suggestions to tasks already in this request
+        frm.set_query('task', 'suggested_employees', function() {
+            const tasks = (frm.doc.task_request_details || []).map(r => r.task).filter(Boolean);
+            if (!tasks.length) return {};
+            return { filters: [['Task', 'name', 'in', tasks]] };
+        });
 
         if (frm.doc.docstatus === 1 && !frm.is_new()) {
             frm.add_custom_button(__('Task Work Plan'), function() {
