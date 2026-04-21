@@ -29,6 +29,17 @@ class TaskWorkAssignment(Document):
         self.validate_achievement_totals()
         self.validate_dates()
         self.calculate_totals()
+        self.populate_worker_names()
+
+    def populate_worker_names(self):
+        seen = []
+        for row in self.get("worker_assignments", []):
+            name = (row.worker_full_name or "").strip()
+            if not name and row.employee_name:
+                name = frappe.db.get_value("Task Worker", row.employee_name, "full_name") or row.employee_name
+            if name and name not in seen:
+                seen.append(name)
+        self.worker_names = ", ".join(seen)
 
     def on_submit(self):
         if self.task_work_request:

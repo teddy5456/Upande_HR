@@ -19,6 +19,7 @@ doc_events = {}
 # Restrict list/search results to the current user's company.
 # System Managers bypass these conditions and see everything.
 permission_query_conditions = {
+	"Task Worker":          "kaitet_taskwork.kaitet_taskwork.permissions.conditions_task_worker",
 	"Task Work Request":    "kaitet_taskwork.kaitet_taskwork.permissions.conditions_task_work_request",
 	"Task Work Plan":       "kaitet_taskwork.kaitet_taskwork.permissions.conditions_task_work_plan",
 	"Task Work Assignment": "kaitet_taskwork.kaitet_taskwork.permissions.conditions_task_work_assignment",

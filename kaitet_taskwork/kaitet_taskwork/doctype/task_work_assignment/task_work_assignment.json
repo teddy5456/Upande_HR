@@ -28,6 +28,7 @@
   "section_break_jjun",
   "task_details",
   "section_break_ygwd",
+  "worker_names",
   "worker_assignments",
   "amended_from"
  ],
@@ -150,6 +151,13 @@
   {
    "fieldname": "section_break_ygwd",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "worker_names",
+   "fieldtype": "Small Text",
+   "label": "Selected Workers",
+   "read_only": 1,
+   "description": "Auto-populated list of unique worker names currently on this assignment"
   },
   {
    "fieldname": "worker_assignments",

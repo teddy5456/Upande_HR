@@ -51,6 +51,13 @@ def _ensure_weekly_hours_off_leave_type():
 	frappe.db.commit()
 
 
+@frappe.whitelist()
+def run_holiday_rollover_now():
+	"""Manually trigger the holiday list rollover from the UI."""
+	rollover_holiday_lists()
+	return {"message": "Holiday list rollover completed successfully."}
+
+
 def rollover_holiday_lists():
 	"""
 	Creates next year's Kaitet Group holiday lists from the current year's lists,

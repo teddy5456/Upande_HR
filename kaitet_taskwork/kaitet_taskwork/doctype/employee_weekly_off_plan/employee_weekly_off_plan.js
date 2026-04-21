@@ -15,6 +15,27 @@ frappe.ui.form.on('Employee Weekly Off Plan', {
 			}, __('Actions'));
 			frm.page.set_inner_btn_group_as_primary(__('Actions'));
 		}
+
+		// Always show rollover button for System Managers
+		if (frappe.user.has_role('System Manager')) {
+			frm.add_custom_button(__('Run Holiday List Rollover'), function() {
+				frappe.confirm(
+					__('This will create next year\'s holiday lists (from November) and reassign all employees from old-year lists to the current year. Proceed?'),
+					function() {
+						frappe.call({
+							method: 'kaitet_taskwork.kaitet_taskwork.kaitet_taskwork.utils.run_holiday_rollover_now',
+							freeze: true,
+							freeze_message: __('Running holiday list rollover...'),
+							callback: function(r) {
+								if (r.message) {
+									frappe.show_alert({ message: __(r.message.message), indicator: 'green' }, 5);
+								}
+							}
+						});
+					}
+				);
+			}, __('Actions'));
+		}
 	},
 
 	on_submit: function(frm) {
@@ -53,6 +74,16 @@ frappe.ui.form.on('Employee Weekly Off Plan', {
 		}
 		if (frm.doc.to_dateoptional && frm.doc.to_dateoptional < frm.doc.from_date) {
 			frappe.msgprint(__('To Date cannot be before From Date'));
+			frappe.validated = false;
+		}
+		const current_year = new Date().getFullYear().toString();
+		const stale = (frm.doc.weekly_offs || []).filter(r => r.holiday_list && !r.holiday_list.includes(current_year));
+		if (stale.length) {
+			frappe.msgprint({
+				title: __('Stale Holiday Lists'),
+				message: __(`${stale.length} row(s) have holiday lists from a previous year. Please re-select the week day for those rows to assign the ${current_year} list.`),
+				indicator: 'orange'
+			});
 			frappe.validated = false;
 		}
 	}
@@ -128,7 +159,12 @@ frappe.ui.form.on('Weekly Offs', {
 			if (exists) {
 				frappe.model.set_value(cdt, cdn, 'holiday_list', mapping[row.week_day]);
 			} else {
-				frappe.msgprint(__(`Holiday list for ${year} not found. Please run the holiday list rollover first.`));
+				frappe.model.set_value(cdt, cdn, 'holiday_list', '');
+				frappe.msgprint({
+					title: __('Holiday List Missing'),
+					message: __(`"${mapping[row.week_day]}" does not exist. Please create the ${year} holiday lists first, then re-select the week day.`),
+					indicator: 'red'
+				});
 			}
 		});
 	},

@@ -8,6 +8,7 @@
   "task_worker",
   "worker_name",
   "task",
+  "days",
   "notes",
   "selected"
  ],
@@ -34,6 +35,13 @@
    "in_list_view": 1,
    "label": "Task",
    "options": "Task"
+  },
+  {
+   "fieldname": "days",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Days",
+   "description": "Number of days this worker should be assigned (overrides default rotation). Leave blank to use default distribution."
   },
   {
    "fieldname": "notes",

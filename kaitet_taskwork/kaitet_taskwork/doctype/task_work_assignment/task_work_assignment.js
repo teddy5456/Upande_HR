@@ -204,12 +204,32 @@ function load_worker_list(frm) {
         method: 'frappe.client.get',
         args: { doctype: 'Task Work Plan', name: frm.doc.task_work_plan }
     }).then(r => {
-        if (r.message) {
-            // Workers may be in task_worker (newer) or employee_name (older)
-            frm._worker_list = [...new Set(
-                (r.message.entries || []).map(e => e.task_worker || e.employee_name).filter(Boolean)
-            )];
-        }
+        if (!r.message) return;
+        // Workers may be in task_worker (newer) or employee_name (older)
+        const raw = [...new Set(
+            (r.message.entries || []).map(e => e.task_worker || e.employee_name).filter(Boolean)
+        )];
+        return filter_workers_by_company(frm, raw).then(filtered => {
+            frm._worker_list = filtered;
+        });
+    });
+}
+
+// Keep worker pools scoped to the assignment's company (Kaitet Ltd. and
+// Karen Roses are separate legal entities and must not cross-staff).
+function filter_workers_by_company(frm, worker_ids) {
+    if (!worker_ids || !worker_ids.length) return Promise.resolve([]);
+    if (!frm.doc.company) return Promise.resolve(worker_ids);
+    return frappe.db.get_list('Task Worker', {
+        filters: [
+            ['name', 'in', worker_ids],
+            ['company', '=', frm.doc.company],
+        ],
+        fields: ['name'],
+        limit: worker_ids.length || 1,
+    }).then(rows => {
+        const allowed = new Set(rows.map(r => r.name));
+        return worker_ids.filter(w => allowed.has(w));
     });
 }
 
@@ -1017,14 +1037,20 @@ function perform_smart_assign(frm) {
     }
 
     // Load suggestions from the plan before running, so we can honour
-    // manager-suggested task→worker pairings
+    // manager-suggested task→worker pairings. Suggestions are also scoped to
+    // the assignment's company so Karen Roses and Kaitet Ltd. stay separated.
     if (frm.doc.task_work_plan) {
         frappe.call({
             method: 'frappe.client.get',
             args: { doctype: 'Task Work Plan', name: frm.doc.task_work_plan },
             callback: function(r) {
-                const suggestions = (r.message && r.message.suggested_employees) || [];
-                _run_smart_assign(frm, workers, suggestions);
+                const raw_suggestions = (r.message && r.message.suggested_employees) || [];
+                const suggestion_ids = [...new Set(raw_suggestions.map(s => s.task_worker).filter(Boolean))];
+                filter_workers_by_company(frm, suggestion_ids).then(allowed => {
+                    const allowed_set = new Set(allowed);
+                    const suggestions = raw_suggestions.filter(s => allowed_set.has(s.task_worker));
+                    _run_smart_assign(frm, workers, suggestions);
+                });
             }
         });
     } else {
@@ -1033,26 +1059,45 @@ function perform_smart_assign(frm) {
 }
 
 function _run_smart_assign(frm, workers, suggestions) {
-    // Build task → [suggested workers] map from manager suggestions
-    // Only suggestions that have a specific task are used as task-pinned;
-    // suggestions without a task just join the general pool.
-    const task_suggestions = {};   // task_id → ordered array of worker IDs
-    const suggested_pool   = [];   // workers suggested without a specific task
-    suggestions.forEach(s => {
-        if (s.task_worker) {
-            if (s.task) {
-                if (!task_suggestions[s.task]) task_suggestions[s.task] = [];
-                if (!task_suggestions[s.task].includes(s.task_worker))
-                    task_suggestions[s.task].push(s.task_worker);
-            } else {
-                if (!suggested_pool.includes(s.task_worker))
-                    suggested_pool.push(s.task_worker);
-            }
+    // If HR ticked "Use" on any suggested workers, those override the general pool.
+    // Each selected row may carry a `days` override — that worker is assigned for
+    // exactly that many days on the task, bypassing the per-day daily_target.
+    const selected_rows = suggestions.filter(s => s.selected && s.task_worker);
+    const use_selected_only = selected_rows.length > 0;
+    const source_rows = use_selected_only ? selected_rows : suggestions.filter(s => s.task_worker);
+
+    // Build task → ordered array of {worker, days} for pinned suggestions,
+    // and a pool for unpinned suggestions.
+    const task_suggestions = {};      // task_id → [{worker, days}]
+    const suggested_pool   = [];      // [{worker, days}] with no task specified
+    const days_override    = {};      // "task::worker" → days
+    source_rows.forEach(s => {
+        const entry = { worker: s.task_worker, days: cint(s.days) || 0 };
+        if (s.task) {
+            if (!task_suggestions[s.task]) task_suggestions[s.task] = [];
+            if (!task_suggestions[s.task].some(e => e.worker === entry.worker))
+                task_suggestions[s.task].push(entry);
+            if (entry.days) days_override[`${s.task}::${entry.worker}`] = entry.days;
+        } else {
+            if (!suggested_pool.some(e => e.worker === entry.worker))
+                suggested_pool.push(entry);
         }
     });
 
-    // Combine suggestion pool with plan workers (suggestions first for priority)
-    const all_workers = [...new Set([...suggested_pool, ...workers])];
+    // Worker pool: when HR has selected rows we use only those; otherwise fall
+    // back to the plan's full worker list.
+    const pool_from_suggestions = [
+        ...suggested_pool.map(e => e.worker),
+        ...Object.values(task_suggestions).flat().map(e => e.worker),
+    ];
+    const all_workers = use_selected_only
+        ? [...new Set(pool_from_suggestions)]
+        : [...new Set([...pool_from_suggestions, ...workers])];
+
+    if (!all_workers.length) {
+        frappe.msgprint(__('No workers available for Smart Assign.'));
+        return;
+    }
 
     // Preserve rows that were manually assigned OR already have actual work recorded
     const locked_rows = (frm.doc.worker_assignments || []).filter(
@@ -1093,59 +1138,92 @@ function _run_smart_assign(frm, workers, suggestions) {
         const rate         = flt(td.rate);
         if (!total_work) return;
 
-        // For this task: pinned suggestions go first, then general rotation
-        const pinned   = task_suggestions[td.task] || [];
-        const task_pool = [...new Set([...pinned, ...all_workers])];
+        // Pinned workers for this task: use only selected ones when present,
+        // otherwise include the general pool.
+        const pinned_entries = task_suggestions[td.task] || [];
+        const pinned_workers = pinned_entries.map(e => e.worker);
+        const task_pool = use_selected_only && pinned_workers.length
+            ? [...new Set(pinned_workers)]
+            : [...new Set([...pinned_workers, ...all_workers])];
 
-        const max_per_day  = task_pool.length * daily_target;
-        const days_needed  = Math.ceil(total_work / max_per_day);
-        let work_left      = total_work;
-        const task_start   = new Date(current_date);
         const used_workers = new Set();
+        const task_start   = new Date(current_date);
+        let work_left      = total_work;
+        let max_day_offset = 0;
+
+        const addRow = (emp, qty, day_offset) => {
+            const day_date = new Date(task_start);
+            day_date.setDate(day_date.getDate() + day_offset);
+            const date_str = frappe.datetime.obj_to_str(day_date);
+            if (locked_keys.has(`${td.task}::${date_str}::${emp}`)) return 0;
+
+            const row = frm.add_child('worker_assignments');
+            row.employee_name       = emp;
+            row.task                = td.task;
+            row.uom                 = td.uom;
+            row.daily_target        = daily_target;
+            row.rate                = rate;
+            row.days                = 1;
+            row.quantity_assigned   = qty;
+            row.total_assigned_cost = flt(rate * qty, 2);
+            row.assignment_date     = date_str;
+            row.manually_assigned   = 0;
+            used_workers.add(emp);
+            if (day_offset > max_day_offset) max_day_offset = day_offset;
+            return qty;
+        };
+
+        // Pre-allocate overachievers: suggested workers with a `days` override.
+        // Their share = (total_work / num_pinned_entries) spread over their `days`,
+        // which may exceed daily_target (the "bypass the daily rate" case).
+        const overachievers = pinned_entries.filter(e => e.days > 0);
+        if (overachievers.length && pinned_entries.length) {
+            const equal_share = total_work / pinned_entries.length;
+            overachievers.forEach(entry => {
+                const share = Math.min(equal_share, work_left);
+                if (share <= 0) return;
+                const per_day = flt(share / entry.days, 2);
+                for (let d = 0; d < entry.days && work_left > 0; d++) {
+                    const qty = flt(Math.min(per_day, work_left), 2);
+                    work_left -= addRow(entry.worker, qty, d);
+                }
+            });
+        }
+
+        // Distribute remaining work across the task pool, excluding workers
+        // whose share is already satisfied by an override.
+        const satisfied = new Set(overachievers.map(e => e.worker));
+        const rotation_pool = task_pool.filter(w => !satisfied.has(w));
+        const effective_pool = rotation_pool.length ? rotation_pool : task_pool;
+
+        const max_per_day = effective_pool.length * daily_target;
+        const days_needed = max_per_day > 0 ? Math.ceil(work_left / max_per_day) : 0;
 
         for (let day = 0; day < days_needed && work_left > 0; day++) {
-            const day_date      = new Date(task_start);
-            day_date.setDate(day_date.getDate() + day);
             const work_today    = Math.min(work_left, max_per_day);
-            const workers_today = Math.min(Math.ceil(work_today / daily_target), task_pool.length);
+            const workers_today = Math.min(Math.ceil(work_today / daily_target), effective_pool.length);
 
             for (let i = 0; i < workers_today && work_left > 0; i++) {
-                const emp = task_pool[rot_idx % task_pool.length];
+                const emp = effective_pool[rot_idx % effective_pool.length];
                 rot_idx++;
-
-                const date_str = frappe.datetime.obj_to_str(day_date);
-                if (locked_keys.has(`${td.task}::${date_str}::${emp}`)) continue;
-
                 const qty = flt(Math.min(daily_target, work_left), 2);
-
-                const row = frm.add_child('worker_assignments');
-                row.employee_name       = emp;
-                row.task                = td.task;
-                row.uom                 = td.uom;
-                row.daily_target        = daily_target;
-                row.rate                = rate;
-                row.days                = 1;
-                row.quantity_assigned   = qty;
-                row.total_assigned_cost = flt(rate * qty, 2);
-                row.assignment_date     = date_str;
-                row.manually_assigned   = 0;
-
-                used_workers.add(emp);
-                work_left -= qty;
+                work_left -= addRow(emp, qty, day);
             }
         }
 
-        current_date.setDate(current_date.getDate() + days_needed);
+        const actual_days = Math.max(max_day_offset + 1, days_needed);
+        current_date.setDate(current_date.getDate() + actual_days);
 
         summary.push({
             task:    td.task_name || td.task,
             needed:  cint(td.workers) || 1,
             used:    used_workers.size,
             total:   total_work,
-            per_day: max_per_day,
+            per_day: (effective_pool.length || 1) * daily_target,
             orig:    orig_days,
-            actual:  days_needed,
-            pinned:  pinned.length
+            actual:  actual_days,
+            pinned:  pinned_entries.length,
+            over:    overachievers.length
         });
     });
 
@@ -1163,8 +1241,11 @@ function _run_smart_assign(frm, workers, suggestions) {
         const pinned_badge = s.pinned
             ? `<span class="badge" style="background:#5e64ff;color:#fff">${s.pinned} suggested</span>`
             : '';
+        const over_badge = s.over
+            ? `<span class="badge" style="background:#ff7846;color:#fff">${s.over} overachiever</span>`
+            : '';
         return `<tr>
-            <td>${s.task} ${pinned_badge}</td><td>${s.needed}</td><td>${s.used}</td>
+            <td>${s.task} ${pinned_badge} ${over_badge}</td><td>${s.needed}</td><td>${s.used}</td>
             <td>${s.total}</td><td>${s.per_day.toFixed(1)}</td>
             <td>${s.orig}</td><td>${s.actual}</td><td>${status}</td>
         </tr>`;

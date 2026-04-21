@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "payroll_number",
+  "company",
   "current_assignment",
   "section_personal_information",
   "first_name",
@@ -35,6 +36,16 @@
   "mpesa_name"
  ],
  "fields": [
+  {
+   "bold": 1,
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
   {
    "bold": 1,
    "description": "5-digit payroll number. Leave blank to auto-generate a unique number.",
@@ -223,7 +234,7 @@
    "table_fieldname": "disbursement_entries"
   }
  ],
- "modified": "2026-02-24 11:58:58.547241",
+ "modified": "2026-04-15 00:00:00.000000",
  "modified_by": "teddy@upande.com",
  "module": "Kaitet Taskwork",
  "name": "Task Worker",

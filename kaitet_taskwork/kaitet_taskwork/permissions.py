@@ -70,8 +70,11 @@ def conditions_tw_weekly_disbursement(user):
     return _company_condition("`tabTW Weekly Disbursement`", user=user)
 
 
-# Note: Task Worker and Work Location have no company field, so no per-company
-# filtering is applied to those master records.
+def conditions_task_worker(user):
+    return _company_condition("`tabTask Worker`", user=user)
+
+
+# Note: Work Location has no company field, so no per-company filtering applies.
 
 
 @frappe.whitelist()

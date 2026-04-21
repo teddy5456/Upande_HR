@@ -90,6 +90,17 @@ frappe.ui.form.on('TW Weekly Disbursement', {
 
     onload: function(frm) {
         set_account_filters(frm);
+        // Auto-populate company from the logged-in user's employee record
+        if (frm.doc.__islocal && !frm.doc.company) {
+            frappe.call({
+                method: 'kaitet_taskwork.kaitet_taskwork.permissions.get_current_user_company',
+                callback: function(r) {
+                    if (r.message) {
+                        frm.set_value('company', r.message);
+                    }
+                }
+            });
+        }
     }
 });
 

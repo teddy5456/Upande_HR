@@ -70,8 +70,21 @@ def _get_worker_details(wid):
 class TWWeeklyDisbursement(Document):
 
 	def validate(self):
+		self.validate_company_access()
 		self.calculate_totals()
 		self.validate_not_already_paid()
+
+	def validate_company_access(self):
+		"""Non-system-managers may only create disbursements for their own company."""
+		from kaitet_taskwork.kaitet_taskwork.permissions import get_user_company, _is_system_manager
+		if _is_system_manager():
+			return
+		user_company = get_user_company()
+		if user_company and self.company and user_company != self.company:
+			frappe.throw(
+				f"You can only create disbursements for <b>{user_company}</b>. "
+				f"Please select your company."
+			)
 
 	def validate_not_already_paid(self):
 		if self.status == "Paid":
@@ -79,6 +92,7 @@ class TWWeeklyDisbursement(Document):
 		existing = frappe.db.exists("TW Weekly Disbursement", {
 			"week_start_date": self.week_start_date,
 			"week_end_date": self.week_end_date,
+			"company": self.company,
 			"status": "Paid",
 			"name": ["!=", self.name or ""]
 		})
@@ -110,17 +124,20 @@ class TWWeeklyDisbursement(Document):
 		"""
 		if not self.week_start_date or not self.week_end_date:
 			frappe.throw("Please set Year and Week Number first.")
+		if not self.company:
+			frappe.throw("Please select a Company first.")
 
 		week_start = getdate(self.week_start_date)
 		week_end = getdate(self.week_end_date)
 
-		# Assignments overlapping the week (not cancelled)
+		# Assignments overlapping the week, scoped to the selected company (not cancelled)
 		assignments = frappe.db.sql("""
 			SELECT name, start_date, completion_date,
 			       expected_start_date, expected_end_date,
 			       task_work_request, task_work_plan, unitdivision, cost_centre
 			FROM `tabTask Work Assignment`
 			WHERE docstatus != 2
+			  AND company = %(company)s
 			  AND (
 			      (start_date IS NOT NULL
 			         AND start_date <= %(end)s
@@ -129,7 +146,7 @@ class TWWeeklyDisbursement(Document):
 			         AND expected_start_date <= %(end)s
 			         AND expected_end_date >= %(start)s)
 			  )
-		""", {"start": week_start, "end": week_end}, as_dict=True)
+		""", {"start": week_start, "end": week_end, "company": self.company}, as_dict=True)
 
 		if not assignments:
 			frappe.msgprint(
@@ -206,7 +223,14 @@ class TWWeeklyDisbursement(Document):
 		self.disbursement_entries = []
 		self.task_breakdown = []
 
-		for data in worker_totals.values():
+		# Group Bank Transfer workers first, then M-Pesa, alphabetical within each group
+		_method_order = {"Bank Transfer": 0, "M-Pesa": 1}
+		sorted_workers = sorted(
+			worker_totals.values(),
+			key=lambda w: (_method_order.get(w["payment_method"], 2), w["worker_name"])
+		)
+
+		for data in sorted_workers:
 			self.append("disbursement_entries", data)
 
 		for row in assignment_index.values():
@@ -265,8 +289,9 @@ class TWWeeklyDisbursement(Document):
 		wages_account   = getattr(self, "wages_account", None)
 		payment_account = getattr(self, "payment_account", None)
 
-		# Fall back to known defaults for Karen Roses
-		company_for_lookup = self.company or "Karen Roses"
+		# Karen Roses and Kaitet Ltd. are separate companies; always use self.company
+		# and fall back to Kaitet Ltd. only when nothing else is set.
+		company_for_lookup = self.company or "Kaitet Ltd."
 		if not wages_account:
 			wages_account = frappe.db.get_value(
 				"Account",

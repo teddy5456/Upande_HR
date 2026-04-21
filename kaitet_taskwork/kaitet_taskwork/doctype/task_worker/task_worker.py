@@ -21,7 +21,7 @@ class TaskWorker(Document):
     def _generate_payroll_number(self):
         existing = set(frappe.db.sql_list("SELECT name FROM `tabTask Worker`"))
         for _ in range(10000):
-            candidate = str(random.randint(10000, 99999))
+            candidate = str(random.randint(50000, 59999))
             if candidate not in existing:
                 return candidate
         frappe.throw(frappe._("Could not generate a unique payroll number. Please contact the system administrator."))
