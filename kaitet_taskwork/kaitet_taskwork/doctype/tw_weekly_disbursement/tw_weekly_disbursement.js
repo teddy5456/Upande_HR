@@ -10,39 +10,8 @@ frappe.ui.form.on('TW Weekly Disbursement', {
             }, __('Actions'));
         }
 
-        // ── Submitted + Pending: Approve ────────────────────────────────
-        if (frm.doc.docstatus === 1 && frm.doc.status === 'Pending') {
-            frm.add_custom_button(__('Approve'), function() {
-                frappe.confirm(
-                    __('Approve this disbursement for payment?'),
-                    function() {
-                        frappe.call({
-                            method: 'approve',
-                            doc: frm.doc,
-                            callback: function() { frm.reload_doc(); }
-                        });
-                    }
-                );
-            }, __('Actions'));
-        }
-
-        // ── Submitted + Approved: Mark as Paid ─────────────────────────
-        if (frm.doc.docstatus === 1 && frm.doc.status === 'Approved') {
-            frm.add_custom_button(__('Mark as Paid'), function() {
-                frappe.confirm(
-                    __('Mark this disbursement as Paid? '
-                     + 'This will record the wages expense and lock the payment. '
-                     + 'You can still add the payment reference and attachment afterwards.'),
-                    function() {
-                        frappe.call({
-                            method: 'mark_as_paid',
-                            doc: frm.doc,
-                            callback: function() { frm.reload_doc(); }
-                        });
-                    }
-                );
-            }, __('Actions'));
-        }
+        // Approve / Reject / Mark as Paid are rendered by the workflow engine
+        // (role-gated: HR Manager submits for approval, CFO approves/rejects).
 
         // ── Paid: info banner (save still enabled for references/attachments) ─
         if (frm.doc.status === 'Paid') {
@@ -191,11 +160,12 @@ function setup_week_display(frm) {
 /* ── Status colour indicator ─────────────────────────────────────────── */
 function set_status_indicator(frm) {
     const colors = {
-        'Draft':     'grey',
-        'Pending':   'orange',
-        'Approved':  'blue',
-        'Paid':      'green',
-        'Cancelled': 'red'
+        'Draft':             'grey',
+        'Pending Approval':  'orange',
+        'Approved':          'blue',
+        'Rejected':          'red',
+        'Paid':              'green',
+        'Cancelled':         'red'
     };
     frm.page.set_indicator(frm.doc.status || 'Draft', colors[frm.doc.status] || 'grey');
 }

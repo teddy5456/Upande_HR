@@ -47,4 +47,19 @@ fixtures = [
 		"dt": "Print Format",
 		"filters": [["module", "=", "Kaitet Taskwork"]],
 	},
+	{
+		"dt": "Workflow",
+		"filters": [["name", "=", "TW Weekly Disbursement Approval"]],
+	},
+	{
+		"dt": "Workflow State",
+		"filters": [["name", "in", ["Pending Approval", "Rejected", "Paid"]]],
+	},
+	{
+		"dt": "Workflow Action Master",
+		"filters": [["name", "in", ["Submit for Approval", "Approve", "Reject", "Mark as Paid"]]],
+	},
 ]
+
+after_install = "kaitet_taskwork.kaitet_taskwork.setup.workflow.execute"
+after_migrate = ["kaitet_taskwork.kaitet_taskwork.setup.workflow.execute"]

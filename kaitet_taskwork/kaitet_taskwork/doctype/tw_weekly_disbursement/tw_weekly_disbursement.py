@@ -244,34 +244,27 @@ class TWWeeklyDisbursement(Document):
 			title="Disbursement Loaded", indicator="green"
 		)
 
-	def on_submit(self):
-		self.db_set("status", "Pending")
+	def on_update(self):
+		# Workflow transition Approved → Paid: record wages JE.
+		# Fires once when status flips to "Paid" on a submitted doc.
+		before = self.get_doc_before_save()
+		if not before:
+			return
+		if before.status != self.status and self.status == "Paid" and self.docstatus == 1:
+			self._record_payment()
 
-	@frappe.whitelist()
-	def approve(self):
-		if self.docstatus != 1:
-			frappe.throw("Submit the disbursement before approving.")
-		if self.status != "Pending":
-			frappe.throw("Only Pending disbursements can be approved.")
-		self.db_set("status", "Approved")
-
-	@frappe.whitelist()
-	def mark_as_paid(self):
-		if self.status == "Paid":
-			frappe.throw("This disbursement has already been paid.")
-		if self.docstatus != 1:
-			frappe.throw("Please submit the disbursement before marking as paid.")
+	def _record_payment(self):
+		if frappe.db.get_value(self.doctype, self.name, "journal_entry"):
+			return  # already paid — don't double-post
 
 		je = self._create_wages_journal_entry()
 		je_name = je.name
 
-		# Update parent fields directly — self.save() is blocked on submitted docs
-		self.db_set("status",        "Paid",                 update_modified=False)
-		self.db_set("paid_on",       nowdate(),               update_modified=False)
-		self.db_set("paid_by",       frappe.session.user,     update_modified=False)
-		self.db_set("journal_entry", je_name,                 update_modified=False)
+		# Submitted doc — update via db_set to bypass the submission lock
+		self.db_set("paid_on",       nowdate(),            update_modified=False)
+		self.db_set("paid_by",       frappe.session.user,  update_modified=False)
+		self.db_set("journal_entry", je_name,              update_modified=False)
 
-		# Mark each disbursement row as paid
 		for entry in self.disbursement_entries:
 			frappe.db.set_value("TW Disbursement Entry", entry.name, "paid", 1)
 
