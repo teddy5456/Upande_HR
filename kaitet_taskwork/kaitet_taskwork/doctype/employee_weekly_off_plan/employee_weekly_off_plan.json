@@ -19,6 +19,7 @@
   "section_break_hqmc",
   "weekly_offs",
   "amended_from",
+  "applied",
   "reverted"
  ],
  "fields": [
@@ -85,6 +86,13 @@
    "label": "Title",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "applied",
+   "fieldtype": "Check",
+   "label": "Applied",
+   "read_only": 1
   },
   {
    "default": "0",

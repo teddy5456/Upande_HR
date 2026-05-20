@@ -28,6 +28,7 @@ permission_query_conditions = {
 
 scheduler_events = {
 	"daily": [
+		"kaitet_taskwork.kaitet_taskwork.doctype.employee_weekly_off_plan.employee_weekly_off_plan.apply_pending_weekly_off_plans",
 		"kaitet_taskwork.kaitet_taskwork.doctype.employee_weekly_off_plan.employee_weekly_off_plan.revert_expired_weekly_off_plans",
 		"kaitet_taskwork.kaitet_taskwork.kaitet_taskwork.utils.rollover_holiday_lists",
 		"kaitet_taskwork.kaitet_taskwork.kaitet_taskwork.utils.process_security_guard_attendance",
