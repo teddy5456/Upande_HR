@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import getdate
 
 from kaitet_taskwork.kaitet_taskwork.doctype.task_work_request.task_work_request import (
     _get_users_for_role_and_company,
@@ -13,6 +14,81 @@ from kaitet_taskwork.kaitet_taskwork.doctype.task_work_request.task_work_request
 class BulkOvertimeRequisition(Document):
 	def validate(self):
 		self.calculate_estimated_cost()
+		self.validate_entries()
+
+	def validate_entries(self):
+		self.validate_duplicate_employees()
+		self.validate_supervisor_employees()
+		self.validate_cross_farm_entries()
+
+	def validate_duplicate_employees(self):
+		"""Reject if the same employee appears more than once in the entries table."""
+		seen = set()
+		for entry in (self.entries or []):
+			if not entry.employee_name:
+				continue
+			if entry.employee_name in seen:
+				emp_label = frappe.db.get_value("Employee", entry.employee_name, "employee_name") or entry.employee_name
+				frappe.throw(
+					_("Employee {0} is selected more than once in the entries table.").format(emp_label),
+					title=_("Duplicate Employee")
+				)
+			seen.add(entry.employee_name)
+
+	def validate_supervisor_employees(self):
+		"""Reject any employee whose designation contains 'Supervisor'."""
+		for entry in (self.entries or []):
+			if not entry.employee_name:
+				continue
+			designation = frappe.db.get_value("Employee", entry.employee_name, "designation")
+			if designation and "supervisor" in designation.lower():
+				emp_label = frappe.db.get_value("Employee", entry.employee_name, "employee_name") or entry.employee_name
+				frappe.throw(
+					_("Employee {0} ({1}) has a Supervisor designation and cannot be added to overtime entries.").format(
+						emp_label, designation
+					),
+					title=_("Supervisor Not Allowed")
+				)
+
+	def validate_cross_farm_entries(self):
+		"""Reject if any employee already appears in a BOR for a different farm on the same date."""
+		if not self.posting_date or not self.entries or not self.unitdivision:
+			return
+
+		posting_date = getdate(self.posting_date)
+		current_farm = self.unitdivision
+
+		for entry in (self.entries or []):
+			if not entry.employee_name:
+				continue
+			conflict = frappe.db.sql(
+				"""
+				SELECT bor.name, bor.unitdivision
+				FROM `tabBulk Overtime Requisition` bor
+				INNER JOIN `tabOvertime Entry` oe ON oe.parent = bor.name
+				WHERE oe.employee_name = %(employee)s
+				  AND DATE(bor.posting_date) = %(date)s
+				  AND bor.unitdivision != %(farm)s
+				  AND bor.name != %(current)s
+				  AND bor.docstatus != 2
+				LIMIT 1
+				""",
+				{
+					"employee": entry.employee_name,
+					"date": posting_date,
+					"farm": current_farm,
+					"current": self.name or "",
+				},
+				as_dict=True,
+			)
+			if conflict:
+				emp_label = frappe.db.get_value("Employee", entry.employee_name, "employee_name") or entry.employee_name
+				frappe.throw(
+					_("Employee {0} is already included in Bulk Overtime Requisition {1} for farm '{2}' on {3}. An employee cannot appear in two different farms on the same day.").format(
+						emp_label, conflict[0].name, conflict[0].unitdivision, posting_date
+					),
+					title=_("Cross-Farm Conflict")
+				)
 
 	def on_update(self):
 		"""Handle workflow state changes and send notifications"""
@@ -150,6 +226,58 @@ def create_notification(document, recipients, subject, message):
 			notification.insert(ignore_permissions=True)
 		except Exception as e:
 			frappe.log_error(f"Failed to create notification: {str(e)}", "Bulk Overtime Notification Error")
+
+
+@frappe.whitelist()
+def validate_overtime_entry_employee(employee, posting_date, farm, current_doc):
+	"""
+	Called from the client when an employee is selected in the entries child table.
+	Returns {"valid": True} or {"valid": False, "message": "..."}.
+	"""
+	# Supervisor check
+	designation = frappe.db.get_value("Employee", employee, "designation")
+	if designation and "supervisor" in designation.lower():
+		emp_label = frappe.db.get_value("Employee", employee, "employee_name") or employee
+		return {
+			"valid": False,
+			"message": _("Employee {0} ({1}) has a Supervisor designation and cannot be added to overtime entries.").format(
+				emp_label, designation
+			),
+		}
+
+	# Cross-farm check
+	if posting_date and farm:
+		date = getdate(posting_date)
+		conflict = frappe.db.sql(
+			"""
+			SELECT bor.name, bor.unitdivision
+			FROM `tabBulk Overtime Requisition` bor
+			INNER JOIN `tabOvertime Entry` oe ON oe.parent = bor.name
+			WHERE oe.employee_name = %(employee)s
+			  AND DATE(bor.posting_date) = %(date)s
+			  AND bor.unitdivision != %(farm)s
+			  AND bor.name != %(current)s
+			  AND bor.docstatus != 2
+			LIMIT 1
+			""",
+			{
+				"employee": employee,
+				"date": date,
+				"farm": farm,
+				"current": current_doc or "",
+			},
+			as_dict=True,
+		)
+		if conflict:
+			emp_label = frappe.db.get_value("Employee", employee, "employee_name") or employee
+			return {
+				"valid": False,
+				"message": _("Employee {0} is already in Bulk Overtime Requisition {1} for farm '{2}' on the same day.").format(
+					emp_label, conflict[0].name, conflict[0].unitdivision
+				),
+			}
+
+	return {"valid": True}
 
 
 @frappe.whitelist()

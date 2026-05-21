@@ -67,6 +67,46 @@ frappe.ui.form.on("Bulk Overtime Requisition", {
 
 // Child table events
 frappe.ui.form.on("Overtime Entry", {
+    employee_name(frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+        if (!row.employee_name) return;
+
+        // Duplicate check (client-side, instant)
+        let duplicates = (frm.doc.entries || []).filter(
+            e => e.employee_name === row.employee_name && e.name !== row.name
+        );
+        if (duplicates.length > 0) {
+            frappe.model.set_value(cdt, cdn, 'employee_name', '');
+            frappe.msgprint({
+                title: __('Duplicate Employee'),
+                message: __('Employee {0} is already in the entries table.', [row.employee_name]),
+                indicator: 'red'
+            });
+            return;
+        }
+
+        // Supervisor and cross-farm checks (server-side)
+        frappe.call({
+            method: 'kaitet_taskwork.kaitet_taskwork.doctype.bulk_overtime_requisition.bulk_overtime_requisition.validate_overtime_entry_employee',
+            args: {
+                employee: row.employee_name,
+                posting_date: frm.doc.posting_date || '',
+                farm: frm.doc.unitdivision || '',
+                current_doc: frm.doc.name || ''
+            },
+            callback(r) {
+                if (r.message && !r.message.valid) {
+                    frappe.model.set_value(cdt, cdn, 'employee_name', '');
+                    frappe.msgprint({
+                        title: __('Employee Not Allowed'),
+                        message: r.message.message,
+                        indicator: 'red'
+                    });
+                }
+            }
+        });
+    },
+
     entries_add(frm) {
         calculate_totals(frm);
     },
