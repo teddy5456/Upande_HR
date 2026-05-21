@@ -11,7 +11,12 @@ frappe.ui.form.on('Employee Weekly Off Plan', {
 
 		if (!frm.is_new() && frm.doc.docstatus === 1) {
 			frm.add_custom_button(__('Update Employee Holiday List'), function() {
-				force_update_employee_holiday_list(frm);
+				frappe.confirm(
+					'This will directly update the <b>Holiday List</b> for all employees.<br><br>Proceed?',
+					function() {
+						frm.call('update_employee_holiday_lists').then(() => frm.reload_doc());
+					}
+				);
 			}, __('Actions'));
 			frm.page.set_inner_btn_group_as_primary(__('Actions'));
 		}
@@ -36,10 +41,6 @@ frappe.ui.form.on('Employee Weekly Off Plan', {
 				);
 			}, __('Actions'));
 		}
-	},
-
-	on_submit: function(frm) {
-		force_update_employee_holiday_list(frm);
 	},
 
 	manager: function(frm) {
@@ -88,36 +89,6 @@ frappe.ui.form.on('Employee Weekly Off Plan', {
 		}
 	}
 });
-
-function force_update_employee_holiday_list(frm) {
-	let rows = frm.doc.weekly_offs || [];
-	if (!rows.length) { frappe.msgprint('No employees found.'); return; }
-
-	frappe.confirm(
-		'This will directly update the <b>Holiday List</b> for all employees.<br><br>Proceed?',
-		function() {
-			rows.forEach(row => {
-				if (!row.employee_name || !row.holiday_list) return;
-
-				frappe.call({
-					method: 'frappe.client.get_value',
-					args: { doctype: 'Employee', fieldname: 'holiday_list', filters: { name: row.employee_name } },
-					callback: function(res) {
-						let original = res.message.holiday_list || '';
-						frappe.model.set_value(row.doctype, row.name, 'previous_holiday_list', original);
-
-						frappe.call({
-							method: 'frappe.client.set_value',
-							args: { doctype: 'Employee', name: row.employee_name, fieldname: 'holiday_list', value: row.holiday_list },
-							callback: () => {}
-						});
-					}
-				});
-			});
-			frappe.msgprint('Employee Holiday Lists updated successfully.');
-		}
-	);
-}
 
 function auto_revert_employee_holiday_list(frm) {
 	let rows = frm.doc.weekly_offs || [];
