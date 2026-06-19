@@ -19,6 +19,10 @@ class TWEmployeeChangeRequest(Document):
 		emp_name = frappe.db.get_value("Task Worker", self.new_employee, "full_name") or self.new_employee
 		self.title = f"{self.change_type} – {emp_name} on {self.task_work_assignment}"
 
+	def validate(self):
+		if self.change_type == "Replace Employee" and self.old_employee and self.old_employee == self.new_employee:
+			frappe.throw(_("New Employee must be different from the Employee to Replace."))
+
 	def on_update(self):
 		self._send_notification()
 
