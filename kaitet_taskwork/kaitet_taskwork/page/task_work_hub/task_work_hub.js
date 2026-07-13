@@ -30,6 +30,7 @@ class TaskWorkHub {
 		this.views = ["overview", "pipeline", "assignments", "workers", "disbursements"];
 		const route_view = frappe.get_route()[1];
 		this.view = this.views.includes(route_view) ? route_view : "overview";
+		this.collapsed = localStorage.getItem("twhub_sidebar") === "collapsed";
 		this.inject_css();
 		this.load();
 	}
@@ -92,30 +93,39 @@ class TaskWorkHub {
 		const nav = views
 			.map(
 				([key, label, n]) => `
-				<a class="twh-navlink ${this.view === key ? "on" : ""}" data-view="${key}">
-					${this.icon(key)}${label}${n ? `<span class="n">${this.count(n)}</span>` : ""}
+				<a class="twh-navlink ${this.view === key ? "on" : ""}" data-view="${key}" title="${label}">
+					${this.icon(key)}<span class="lbl">${label}</span>${n ? `<span class="n">${this.count(n)}</span>` : ""}
 				</a>`
 			)
 			.join("");
 
+		const chevron = this.collapsed
+			? '<polyline points="9 18 15 12 9 6"/>'
+			: '<polyline points="15 18 9 12 15 6"/>';
+
 		this.$main.html(`
-			<div class="twhub">
+			<div class="twhub ${this.collapsed ? "twhub--rail" : ""}">
 				<aside class="twh-side">
+					<button class="twh-collapse" title="${this.collapsed ? __("Expand sidebar") : __("Collapse sidebar")}">
+						<svg viewBox="0 0 24 24">${chevron}</svg>
+					</button>
 					<div class="twh-label">${__("Views")}</div>
 					<nav class="twh-nav">${nav}</nav>
-					<div class="twh-label" style="margin-top:18px">${__("Week")} ${d.week.number} · ${frappe.datetime.str_to_user(d.week.start)} – ${frappe.datetime.str_to_user(d.week.end)}</div>
-					<div class="twh-stats">
-						<div><small>${__("Active workers")}</small><b>${d.kpis.workers_active}</b></div>
-						<div><small>${__("On assignment")}</small><b>${d.kpis.workers_assigned}</b></div>
-						<div><small>${__("Running assignments")}</small><b>${d.kpis.active_assignments}</b></div>
-						<div><small>${__("Awaiting my action")}</small><b>${d.inbox.total}</b></div>
-					</div>
-					<div class="twh-label" style="margin-top:18px">${__("Legend")}</div>
-					<div class="twh-legend">
-						<span><i style="background:var(--twh-ok)"></i>${__("On track / paid")}</span>
-						<span><i style="background:var(--twh-warn)"></i>${__("Understaffed / due")}</span>
-						<span><i style="background:var(--twh-hot)"></i>${__("Overdue / unpaid")}</span>
-						<span><i style="background:var(--twh-clay)"></i>${__("Awaiting action")}</span>
+					<div class="twh-collapsible">
+						<div class="twh-label" style="margin-top:18px">${__("Week")} ${d.week.number} · ${frappe.datetime.str_to_user(d.week.start)} – ${frappe.datetime.str_to_user(d.week.end)}</div>
+						<div class="twh-stats">
+							<div><small>${__("Active workers")}</small><b>${d.kpis.workers_active}</b></div>
+							<div><small>${__("On assignment")}</small><b>${d.kpis.workers_assigned}</b></div>
+							<div><small>${__("Running assignments")}</small><b>${d.kpis.active_assignments}</b></div>
+							<div><small>${__("Awaiting my action")}</small><b>${d.inbox.total}</b></div>
+						</div>
+						<div class="twh-label" style="margin-top:18px">${__("Legend")}</div>
+						<div class="twh-legend">
+							<span><i style="background:var(--twh-ok)"></i>${__("On track / paid")}</span>
+							<span><i style="background:var(--twh-warn)"></i>${__("Understaffed / due")}</span>
+							<span><i style="background:var(--twh-hot)"></i>${__("Overdue / unpaid")}</span>
+							<span><i style="background:var(--twh-clay)"></i>${__("Awaiting action")}</span>
+						</div>
 					</div>
 				</aside>
 				<div class="twh-main">${this["render_" + this.view]()}</div>
@@ -126,6 +136,11 @@ class TaskWorkHub {
 
 	bind() {
 		const me = this;
+		this.$main.find(".twh-collapse").on("click", function () {
+			me.collapsed = !me.collapsed;
+			localStorage.setItem("twhub_sidebar", me.collapsed ? "collapsed" : "open");
+			me.render();
+		});
 		this.$main.find(".twh-navlink").on("click", function () {
 			me.view = $(this).data("view");
 			me.render();
@@ -690,6 +705,14 @@ class TaskWorkHub {
 		.twhub--loading{padding:60px;text-align:center;color:var(--twh-mute);display:block}
 		.twhub svg{overflow:visible}
 		.twh-side{position:sticky;top:70px;background:var(--twh-card);border-radius:18px;box-shadow:var(--twh-shadow);padding:18px 16px}
+		.twh-collapse{position:absolute;top:14px;right:12px;width:26px;height:26px;border:0;border-radius:50%;background:rgba(10,10,10,0.05);color:var(--twh-ink4);display:grid;place-items:center;cursor:pointer;transition:all .15s;z-index:1}
+		.twh-collapse:hover{background:var(--twh-ink);color:#fafaf6}
+		.twh-collapse svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.4}
+		.twhub--rail{grid-template-columns:64px minmax(0,1fr)}
+		.twhub--rail .twh-side{padding:44px 10px 14px}
+		.twhub--rail .twh-collapse{right:50%;transform:translateX(50%)}
+		.twhub--rail .twh-label,.twhub--rail .twh-collapsible,.twhub--rail .twh-navlink .lbl,.twhub--rail .twh-navlink .n{display:none}
+		.twhub--rail .twh-navlink{justify-content:center;padding:10px}
 		.twh-label{font-size:9.5px;text-transform:uppercase;letter-spacing:1.6px;color:var(--twh-mute);font-weight:500;margin-bottom:8px}
 		.twh-nav{display:flex;flex-direction:column;gap:2px}
 		.twh-navlink{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:10px;font-weight:500;color:var(--twh-ink4);cursor:pointer;text-decoration:none;transition:all .15s}
