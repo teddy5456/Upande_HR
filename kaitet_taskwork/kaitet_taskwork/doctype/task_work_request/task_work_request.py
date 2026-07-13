@@ -305,6 +305,7 @@ def create_plan_from_request(request_name):
     plan = frappe.new_doc("Task Work Plan")
     plan.task_work_request_ref = request.name
     plan.title = request.name
+    plan.posting_date = frappe.utils.now()
     plan.managers_name = request.farm_managers_name
     plan.unitdivision = request.unitdivision
     plan.business_unit = request.business_unit
@@ -316,24 +317,21 @@ def create_plan_from_request(request_name):
     if hasattr(request, 'custom_expected_start_date'):
         plan.custom_expected_start_date = request.custom_expected_start_date
     
-    # Copy request details
+    # Copy request details (Task Request rows carry the task as a Link and
+    # have no task_name/payment_type columns, so read defensively)
     for req_row in request.task_request_details:
         row = plan.append("entries", {})
-        row.task_name = req_row.task_name
+        row.task_name = req_row.get("task_name") or req_row.get("task")
         row.workers_required = req_row.workers
         row.daily_target = req_row.daily_target
         row.total_work = req_row.total_work
-        row.payment_type = req_row.payment_type
+        row.payment_type = req_row.get("payment_type")
         row.rate = req_row.rate
         row.uom = req_row.uom
         row.workers_available = request.total_workers
-        row.workers_assigned = min(request.total_workers, req_row.workers)
-        
-        # Copy date fields if they exist
-        if hasattr(req_row, 'start_date'):
-            row.start_date = req_row.start_date
-        if hasattr(req_row, 'end_date'):
-            row.end_date = req_row.end_date
+        row.workers_assigned = min(request.total_workers or 0, req_row.workers or 0)
+        row.start_date = req_row.get("start_date")
+        row.end_date = req_row.get("end_date")
     
     plan.flags.ignore_permissions = True
     plan.insert()

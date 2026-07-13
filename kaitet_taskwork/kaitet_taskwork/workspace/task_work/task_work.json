@@ -127,6 +127,13 @@
  "sequence_id": 1,
  "shortcuts": [
   {
+   "color": "Orange",
+   "doc_view": "",
+   "label": "Task Work Hub",
+   "link_to": "task-work-hub",
+   "type": "Page"
+  },
+  {
    "color": "Purple",
    "doc_view": "List",
    "label": "Task Workers",
