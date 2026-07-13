@@ -74,14 +74,18 @@ class TaskWorkHub {
 		frappe.set_route("Form", doctype, name);
 	}
 
+	count(n) {
+		return n >= 100 ? n + "+" : n;
+	}
+
 	// ----------------------------------------------------------------- render
 
 	render() {
 		const d = this.data;
 		const views = [
 			["overview", __("Overview"), ""],
-			["pipeline", __("Pipeline"), d.pipeline.requested.length + d.pipeline.planned.length + d.pipeline.running.length],
-			["assignments", __("Assignments"), d.assignments.length],
+			["pipeline", __("Pipeline"), d.pipeline.requested.total + d.pipeline.planned.total + d.pipeline.running.total],
+			["assignments", __("Assignments"), d.assignments.total],
 			["workers", __("Workers"), d.workers.total],
 			["disbursements", __("Disbursements"), d.disbursements.list.length],
 		];
@@ -89,7 +93,7 @@ class TaskWorkHub {
 			.map(
 				([key, label, n]) => `
 				<a class="twh-navlink ${this.view === key ? "on" : ""}" data-view="${key}">
-					${this.icon(key)}${label}${n ? `<span class="n">${n}</span>` : ""}
+					${this.icon(key)}${label}${n ? `<span class="n">${this.count(n)}</span>` : ""}
 				</a>`
 			)
 			.join("");
@@ -104,7 +108,7 @@ class TaskWorkHub {
 						<div><small>${__("Active workers")}</small><b>${d.kpis.workers_active}</b></div>
 						<div><small>${__("On assignment")}</small><b>${d.kpis.workers_assigned}</b></div>
 						<div><small>${__("Running assignments")}</small><b>${d.kpis.active_assignments}</b></div>
-						<div><small>${__("Awaiting my action")}</small><b>${d.inbox.length}</b></div>
+						<div><small>${__("Awaiting my action")}</small><b>${d.inbox.total}</b></div>
 					</div>
 					<div class="twh-label" style="margin-top:18px">${__("Legend")}</div>
 					<div class="twh-legend">
@@ -151,6 +155,15 @@ class TaskWorkHub {
 		this.$main.find("[data-listview]").on("click", function () {
 			frappe.set_route("List", $(this).attr("data-listview"));
 		});
+		this.$main.find("[data-viewall]").on("click", function (e) {
+			e.stopPropagation();
+			try {
+				frappe.route_options = JSON.parse($(this).attr("data-viewall-filters") || "{}");
+			} catch (err) {
+				frappe.route_options = {};
+			}
+			frappe.set_route("List", $(this).attr("data-viewall"));
+		});
 		this.$main.find(".twh-search input").on("input", function () {
 			const q = $(this).val().toLowerCase();
 			me.$main.find(".twh-wcard").each(function () {
@@ -173,7 +186,7 @@ class TaskWorkHub {
 			[__("Unpaid Weeks"), k.unpaid_weeks, k.unpaid_weeks ? `KES ${this.kes(k.unpaid_net)} · ${this.esc(k.unpaid_label)}` : __("all settled")],
 		];
 		return `
-			${this.pagehead(__("Task Work Overview"), `${d.assignments.length} ${__("running assignments")} · ${d.workers.total} ${__("registered workers")}`)}
+			${this.pagehead(__("Task Work Overview"), `${d.assignments.total} ${__("running assignments")} · ${d.workers.total} ${__("registered workers")}`)}
 			<div class="twh-kpis">${kpis
 				.map(
 					([label, value, unit]) => `
@@ -207,26 +220,47 @@ class TaskWorkHub {
 	}
 
 	render_inbox() {
-		const rows = this.data.inbox;
-		if (!rows.length) {
+		const inbox = this.data.inbox;
+		if (!inbox.total) {
 			return `<div class="twh-empty">${__("Nothing needs your action — the pipeline is clear.")}</div>`;
 		}
 		const tone = { payment: "hot", request: "warn", plan: "clay", change: "ok", draft: "ink" };
-		return `<div class="twh-inbox">${rows
-			.map((r) => {
-				const btn =
-					r.action.type === "method"
-						? `<button class="twh-btn" data-method="${r.action.method}" data-arg="${r.action.method === "create_plan" ? "request_name" : "plan_name"}" data-name="${this.esc(r.action.name)}">${this.esc(r.action.label)}</button>`
-						: `<button class="twh-btn ghost" data-route-dt="${this.esc(r.action.doctype)}" data-route-name="${this.esc(r.action.name)}">${this.esc(r.action.label)}</button>`;
+		return inbox.groups
+			.map((g) => {
+				const rows = g.items
+					.map((r) => {
+						const btn =
+							r.action.type === "method"
+								? `<button class="twh-btn" data-method="${r.action.method}" data-arg="${r.action.method === "create_plan" ? "request_name" : "plan_name"}" data-name="${this.esc(r.action.name)}">${this.esc(r.action.label)}</button>`
+								: `<button class="twh-btn ghost" data-route-dt="${this.esc(r.action.doctype)}" data-route-name="${this.esc(r.action.name)}">${this.esc(r.action.label)}</button>`;
+						return `
+						<div class="twh-inboxrow">
+							<div class="ic ${tone[r.kind] || ""}">${this.icon(r.kind)}</div>
+							<div><div class="t">${this.esc(r.title)}</div><div class="m">${this.esc(r.meta)}</div></div>
+							<div class="age">${this.esc(r.age)}</div>
+							${btn}
+						</div>`;
+					})
+					.join("");
+				const overflow =
+					g.total > g.items.length
+						? `<button class="twh-btn ghost small" ${this.viewall_attrs(g.list)}>${__("View all {0}", [this.count(g.total)])}</button>`
+						: "";
 				return `
-				<div class="twh-inboxrow">
-					<div class="ic ${tone[r.kind] || ""}">${this.icon(r.kind)}</div>
-					<div><div class="t">${this.esc(r.title)}</div><div class="m">${this.esc(r.meta)}</div></div>
-					<div class="age">${this.esc(r.age)}</div>
-					${btn}
+				<div class="twh-inboxgroup">
+					<div class="twh-grouphead">
+						<span class="ic ${tone[g.kind] || ""}">${this.icon(g.kind)}</span>
+						<b>${this.esc(g.label)}</b><span class="n">${this.count(g.total)}</span>
+						${overflow}
+					</div>
+					<div class="twh-inbox">${rows}</div>
 				</div>`;
 			})
-			.join("")}</div>`;
+			.join("");
+	}
+
+	viewall_attrs(list) {
+		return `data-viewall="${this.esc(list.doctype)}" data-viewall-filters="${this.esc(JSON.stringify(list.filters || {}))}"`;
 	}
 
 	render_top_tasks() {
@@ -255,15 +289,20 @@ class TaskWorkHub {
 			[__("Payment"), "var(--twh-teal)", p.payment],
 		];
 		return `
-			${this.pagehead(__("Pipeline"), __("every job from request to payment — click a card to open it"))}
+			${this.pagehead(__("Pipeline"), __("most urgent first — click a card to open it, or the footer for the full list"))}
 			<div class="twh-board">${cols
-				.map(
-					([title, color, cards]) => `
+				.map(([title, color, col]) => {
+					const more =
+						col.total > col.items.length
+							? `<div class="twh-kmore" ${this.viewall_attrs(col)}>+ ${col.total - col.items.length} ${__("more — open list")}</div>`
+							: "";
+					return `
 				<div class="twh-kcol">
-					<div class="head"><i style="background:${color}"></i>${title}<b>${cards.length}</b></div>
-					${cards.length ? cards.map((c) => this.kcard(c)).join("") : `<div class="twh-empty small">${__("Empty")}</div>`}
-				</div>`
-				)
+					<div class="head"><i style="background:${color}"></i>${title}<b>${this.count(col.total)}</b></div>
+					${col.items.length ? col.items.map((c) => this.kcard(c)).join("") : `<div class="twh-empty small">${__("Empty")}</div>`}
+					${more}
+				</div>`;
+				})
 				.join("")}</div>`;
 	}
 
@@ -280,7 +319,18 @@ class TaskWorkHub {
 	// ------------------------------------------------------------ assignments
 
 	render_assignments() {
-		const rows = this.data.assignments;
+		const asg = this.data.assignments;
+		const rows = asg.items;
+		const attention = [];
+		if (asg.over_budget) attention.push(`${asg.over_budget} ${__("over budget")}`);
+		if (asg.ending_soon) attention.push(`${asg.ending_soon} ${__("ending soon")}`);
+		const sub = `${asg.total} ${__("running, most urgent first")}${attention.length ? " · " + attention.join(" · ") : ""}`;
+		const overflow =
+			asg.total > rows.length
+				? `<div class="twh-card" style="margin-top:14px;text-align:center">
+					<button class="twh-btn ghost" data-viewall="Task Work Assignment" data-viewall-filters="${this.esc(JSON.stringify({ stage: ["in", ["Pending", "In Progress"]], docstatus: 1 }))}">${__("Show all {0} assignments", [this.count(asg.total)])}</button>
+				</div>`
+				: "";
 		const body = rows.length
 			? `<div class="twh-tiles">${rows
 					.map((a) => {
@@ -305,7 +355,7 @@ class TaskWorkHub {
 					})
 					.join("")}</div>`
 			: `<div class="twh-card"><div class="twh-empty">${__("No running assignments. Create one from a submitted plan on the Pipeline view.")}</div></div>`;
-		return `${this.pagehead(__("Assignments"), __("running crews — click a tile to open the assignment"))}${body}`;
+		return `${this.pagehead(__("Assignments"), sub)}${body}${overflow}`;
 	}
 
 	// ---------------------------------------------------------------- workers
@@ -575,6 +625,21 @@ class TaskWorkHub {
 		.twh-btn.ghost{background:rgba(10,10,10,0.05);color:var(--twh-ink3);box-shadow:none}
 		.twh-btn.ghost:hover{background:var(--twh-ink);color:#fafaf6}
 		.twh-btn:disabled{opacity:.6;cursor:default;transform:none}
+		.twh-inboxgroup{margin-bottom:14px}
+		.twh-inboxgroup:last-child{margin-bottom:0}
+		.twh-grouphead{display:flex;align-items:center;gap:9px;padding:6px 4px;border-bottom:2px solid rgba(10,10,10,0.08)}
+		.twh-grouphead .ic{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;background:rgba(10,10,10,0.04);color:var(--twh-ink3)}
+		.twh-grouphead .ic svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+		.twh-grouphead .ic.hot{background:rgba(196,48,43,0.10);color:var(--twh-hot)}
+		.twh-grouphead .ic.warn{background:rgba(217,150,46,0.14);color:#96650f}
+		.twh-grouphead .ic.clay{background:rgba(194,90,46,0.12);color:var(--twh-clay-deep)}
+		.twh-grouphead .ic.ok{background:rgba(63,143,79,0.12);color:#2e6b3a}
+		.twh-grouphead b{font-size:12.5px;color:var(--twh-ink)}
+		.twh-grouphead .n{font-size:10px;font-weight:600;background:rgba(10,10,10,0.06);border-radius:99px;padding:1px 8px;color:var(--twh-ink4)}
+		.twh-grouphead .twh-btn{margin-left:auto}
+		.twh-btn.small{padding:5px 12px;font-size:11px}
+		.twh-kmore{margin-top:2px;padding:9px;border-radius:12px;border:1.5px dashed rgba(10,10,10,0.15);text-align:center;font-size:11.5px;font-weight:600;color:var(--twh-ink4);cursor:pointer;transition:all .15s}
+		.twh-kmore:hover{background:var(--twh-ink);border-color:var(--twh-ink);color:#fafaf6}
 		.twh-inboxrow{display:grid;grid-template-columns:38px 1fr auto auto;gap:14px;align-items:center;padding:12px 8px;border-bottom:1px solid var(--twh-hair);border-radius:10px}
 		.twh-inboxrow:last-child{border-bottom:0}
 		.twh-inboxrow:hover{background:rgba(10,10,10,0.02)}

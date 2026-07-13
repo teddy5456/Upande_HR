@@ -22,6 +22,14 @@ from frappe.utils import (
 
 ACTIVE_ASSIGNMENT_STAGES = ("Pending", "In Progress")
 
+# Farms raise 10+ requests a day, so every hub section returns a capped,
+# urgency-sorted slice plus the true total; "view all" routes to the
+# filtered list view.
+QUERY_LIMIT = 100
+INBOX_CAP = 5
+PIPELINE_CAP = 8
+TILE_CAP = 12
+
 
 @frappe.whitelist()
 def get_hub_data():
@@ -46,7 +54,12 @@ def get_hub_data():
         "kpis": _build_kpis(requests, plans, assignments, change_requests, disbursements, workers),
         "inbox": _build_inbox(requests, plans, change_requests, disbursements),
         "pipeline": _build_pipeline(requests, plans, assignments, disbursements),
-        "assignments": assignments,
+        "assignments": {
+            "total": len(assignments),
+            "over_budget": sum(1 for a in assignments if a["spend_pct"] > 100),
+            "ending_soon": sum(1 for a in assignments if a.get("ends_soon")),
+            "items": assignments[:TILE_CAP],
+        },
         "workers": workers,
         "disbursements": disbursements,
         "cost_trend": _build_cost_trend(),
@@ -67,7 +80,7 @@ def _get_requests():
             "posting_date", "estimated_cost", "total_workers", "modified",
         ],
         order_by="posting_date asc",
-        limit_page_length=20,
+        limit_page_length=QUERY_LIMIT,
     )
     drafts = frappe.get_list(
         "Task Work Request",
@@ -95,8 +108,8 @@ def _get_plans():
             "total_workers_planned", "understaffed_tasks", "approved_estimated_cost",
             "custom_expected_start_date", "task_work_request_ref", "modified",
         ],
-        order_by="modified desc",
-        limit_page_length=20,
+        order_by="modified asc",
+        limit_page_length=QUERY_LIMIT,
     )
     return rows
 
@@ -111,7 +124,7 @@ def _get_assignments(today):
             "expected_start_date", "expected_end_date", "modified",
         ],
         order_by="start_date asc",
-        limit_page_length=50,
+        limit_page_length=QUERY_LIMIT,
     )
     if not rows:
         return rows
@@ -148,6 +161,14 @@ def _get_assignments(today):
             r["days_total"] = 0
             r["day"] = 0
         r["ends_soon"] = bool(end and 0 <= date_diff(end, today) <= 3)
+
+    # urgency first: over budget, then ending soon, then oldest start date
+    rows.sort(
+        key=lambda r: (
+            0 if r["spend_pct"] > 100 else 1 if r.get("ends_soon") else 2,
+            str(r.get("start_date") or "9999"),
+        )
+    )
     return rows
 
 
@@ -159,8 +180,8 @@ def _get_change_requests():
             "name", "title", "change_type", "task_work_assignment",
             "old_employee", "new_employee", "reason", "request_date", "modified",
         ],
-        order_by="modified desc",
-        limit_page_length=20,
+        order_by="modified asc",
+        limit_page_length=QUERY_LIMIT,
     )
 
 
@@ -270,44 +291,54 @@ def _build_kpis(requests, plans, assignments, change_requests, disbursements, wo
         "pending_changes": len(change_requests),
         "unpaid_weeks": len(unpaid),
         "unpaid_net": sum(flt(d.get("total_net")) for d in unpaid),
-        "unpaid_label": ", ".join(f"wk {d['week_number']}" for d in unpaid[:3]),
+        "unpaid_label": ", ".join(
+            f"wk {w}" for w in sorted({cint(d["week_number"]) for d in unpaid})[:3]
+        ),
     }
 
 
 def _build_inbox(requests, plans, change_requests, disbursements):
-    inbox = []
-
-    for d in disbursements["list"]:
-        if d["status"] in ("Paid", "Cancelled", "Rejected"):
-            continue
-        inbox.append({
+    """Grouped by kind, each group capped to INBOX_CAP oldest-first with the
+    true total and a filtered list route for the overflow."""
+    unpaid = [
+        d for d in disbursements["list"]
+        if d["status"] not in ("Paid", "Cancelled", "Rejected")
+    ]
+    payments = [
+        {
             "kind": "payment",
             "title": f"Week {d['week_number']} disbursement {d['status'].lower()} · KES {flt(d['total_net']):,.0f} net",
             "meta": f"{d['name']} · {cint(d['total_workers'])} workers",
             "age": pretty_date(d["modified"]),
             "action": {"label": "Open Payment", "type": "route", "doctype": "TW Weekly Disbursement", "name": d["name"]},
-        })
+        }
+        for d in unpaid
+    ]
 
-    for r in requests:
-        if r["is_draft"]:
-            inbox.append({
-                "kind": "draft",
-                "title": f"Draft request · {r['title'] or r['name']}",
-                "meta": f"{r['name']} · {r.get('farm_managers_name') or ''} · est. KES {flt(r.get('estimated_cost')):,.0f}",
-                "age": pretty_date(r["modified"]),
-                "action": {"label": "Complete & Submit", "type": "route", "doctype": "Task Work Request", "name": r["name"]},
-            })
-        else:
-            inbox.append({
-                "kind": "request",
-                "title": f"{r['title'] or r['name']} · {cint(r.get('total_workers'))} workers requested",
-                "meta": f"{r['name']} · {r.get('unitdivision') or r.get('business_unit') or ''} · est. KES {flt(r.get('estimated_cost')):,.0f}",
-                "age": pretty_date(r["modified"]),
-                "action": {"label": "Create Plan", "type": "method", "method": "create_plan", "name": r["name"]},
-            })
+    submitted = [
+        {
+            "kind": "request",
+            "title": f"{r['title'] or r['name']} · {cint(r.get('total_workers'))} workers requested",
+            "meta": f"{r['name']} · {r.get('unitdivision') or r.get('business_unit') or ''} · est. KES {flt(r.get('estimated_cost')):,.0f}",
+            "age": pretty_date(r["modified"]),
+            "action": {"label": "Create Plan", "type": "method", "method": "create_plan", "name": r["name"]},
+        }
+        for r in requests if not r["is_draft"]
+    ]
 
-    for p in plans:
-        inbox.append({
+    drafts = [
+        {
+            "kind": "draft",
+            "title": f"Draft request · {r['title'] or r['name']}",
+            "meta": f"{r['name']} · {r.get('farm_managers_name') or ''} · est. KES {flt(r.get('estimated_cost')):,.0f}",
+            "age": pretty_date(r["modified"]),
+            "action": {"label": "Complete & Submit", "type": "route", "doctype": "Task Work Request", "name": r["name"]},
+        }
+        for r in requests if r["is_draft"]
+    ]
+
+    plan_items = [
+        {
             "kind": "plan",
             "title": f"{p['title'] or p['name']} plan ready · {cint(p.get('total_workers_planned'))} workers picked",
             "meta": f"{p['name']}"
@@ -315,11 +346,14 @@ def _build_inbox(requests, plans, change_requests, disbursements):
                     + (f" · starts {p['custom_expected_start_date']}" if p.get("custom_expected_start_date") else ""),
             "age": pretty_date(p["modified"]),
             "action": {"label": "Create Assignment", "type": "method", "method": "create_assignment", "name": p["name"]},
-        })
+        }
+        for p in plans
+    ]
 
+    changes = []
     for c in change_requests:
         who = f"{c.get('old_employee') or ''} → {c.get('new_employee') or ''}" if c.get("old_employee") else (c.get("new_employee") or "")
-        inbox.append({
+        changes.append({
             "kind": "change",
             "title": f"{c['change_type']} on {c.get('task_work_assignment') or '—'}",
             "meta": f"{c['name']} · {who}" + (f" · {(c.get('reason') or '')[:60]}" if c.get("reason") else ""),
@@ -327,12 +361,46 @@ def _build_inbox(requests, plans, change_requests, disbursements):
             "action": {"label": "Review Change", "type": "route", "doctype": "TW Employee Change Request", "name": c["name"]},
         })
 
-    return inbox
+    groups = []
+
+    def add(kind, label, items, doctype, filters):
+        if items:
+            groups.append({
+                "kind": kind,
+                "label": label,
+                "total": len(items),
+                "items": items[:INBOX_CAP],
+                "list": {"doctype": doctype, "filters": filters},
+            })
+
+    add("payment", "Payments due", payments, "TW Weekly Disbursement",
+        {"status": ["not in", ["Paid", "Cancelled", "Rejected"]]})
+    add("request", "Requests awaiting a plan", submitted, "Task Work Request",
+        {"stage": "Requested", "docstatus": 1})
+    add("plan", "Plans awaiting an assignment", plan_items, "Task Work Plan",
+        {"stage": "Planned"})
+    add("change", "Crew changes to review", changes, "TW Employee Change Request",
+        {"status": "Pending HR Approval"})
+    add("draft", "Your draft requests", drafts, "Task Work Request",
+        {"docstatus": 0})
+
+    return {
+        "total": len(payments) + len(submitted) + len(plan_items) + len(changes) + len(drafts),
+        "groups": groups,
+    }
 
 
 def _build_pipeline(requests, plans, assignments, disbursements):
+    def column(items, doctype, filters):
+        return {
+            "total": len(items),
+            "items": items[:PIPELINE_CAP],
+            "doctype": doctype,
+            "filters": filters,
+        }
+
     return {
-        "requested": [
+        "requested": column([
             {
                 "id": r["name"],
                 "name": r["title"] or r["name"],
@@ -343,8 +411,8 @@ def _build_pipeline(requests, plans, assignments, disbursements):
                 "doctype": "Task Work Request",
             }
             for r in requests
-        ],
-        "planned": [
+        ], "Task Work Request", {"stage": "Requested"}),
+        "planned": column([
             {
                 "id": p["name"],
                 "name": p["title"] or p["name"],
@@ -356,8 +424,8 @@ def _build_pipeline(requests, plans, assignments, disbursements):
                 "doctype": "Task Work Plan",
             }
             for p in plans
-        ],
-        "running": [
+        ], "Task Work Plan", {"stage": "Planned"}),
+        "running": column([
             {
                 "id": a["name"],
                 "name": a["title"] or a["name"],
@@ -368,8 +436,8 @@ def _build_pipeline(requests, plans, assignments, disbursements):
                 "doctype": "Task Work Assignment",
             }
             for a in assignments
-        ],
-        "payment": [
+        ], "Task Work Assignment", {"stage": ["in", ["Pending", "In Progress"]], "docstatus": 1}),
+        "payment": column([
             {
                 "id": d["name"],
                 "name": f"Week {d['week_number']} disbursement",
@@ -380,8 +448,8 @@ def _build_pipeline(requests, plans, assignments, disbursements):
                 "tone": "ok" if d["status"] == "Paid" else "hot",
                 "doctype": "TW Weekly Disbursement",
             }
-            for d in reversed(disbursements["list"][-6:])
-        ],
+            for d in reversed(disbursements["list"])
+        ], "TW Weekly Disbursement", {}),
     }
 
 
