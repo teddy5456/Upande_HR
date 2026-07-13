@@ -28,7 +28,7 @@ ACTIVE_ASSIGNMENT_STAGES = ("Pending", "In Progress")
 QUERY_LIMIT = 100
 INBOX_CAP = 5
 PIPELINE_CAP = 8
-TILE_CAP = 12
+TABLE_CAP = 25
 
 
 @frappe.whitelist()
@@ -58,7 +58,7 @@ def get_hub_data():
             "total": len(assignments),
             "over_budget": sum(1 for a in assignments if a["spend_pct"] > 100),
             "ending_soon": sum(1 for a in assignments if a.get("ends_soon")),
-            "items": assignments[:TILE_CAP],
+            "items": assignments[:TABLE_CAP],
         },
         "workers": workers,
         "disbursements": disbursements,
@@ -117,9 +117,9 @@ def _get_plans():
 def _get_assignments(today):
     rows = frappe.get_list(
         "Task Work Assignment",
-        filters={"docstatus": 1, "stage": ("in", ACTIVE_ASSIGNMENT_STAGES)},
+        filters={"docstatus": ("<", 2), "stage": ("in", ACTIVE_ASSIGNMENT_STAGES)},
         fields=[
-            "name", "title", "stage", "farm_manager", "business_unit", "unitdivision",
+            "name", "title", "stage", "docstatus", "farm_manager", "business_unit", "unitdivision",
             "total_estimated_cost", "start_date", "completion_date",
             "expected_start_date", "expected_end_date", "modified",
         ],
@@ -495,6 +495,84 @@ def _build_top_tasks(assignments):
 # Actions — thin wrappers around the existing chain methods so the hub
 # advances documents with one click and the client can route to the result.
 # ---------------------------------------------------------------------------
+
+@frappe.whitelist()
+def get_assignment_actuals(assignment_name):
+    """Crew rows of one assignment for the hub's Enter Actuals editor."""
+    doc = frappe.get_doc("Task Work Assignment", assignment_name)
+    doc.check_permission("read")
+    return {
+        "name": doc.name,
+        "title": doc.title or doc.name,
+        "stage": doc.stage,
+        "docstatus": doc.docstatus,
+        "rows": [
+            {
+                "name": r.name,
+                "task": r.task,
+                "worker": r.worker_full_name or r.employee_name,
+                "uom": r.uom,
+                "quantity_assigned": flt(r.quantity_assigned),
+                "days": cint(r.days),
+                "rate": flt(r.rate),
+                "actual_quantity": flt(r.actual_quantity),
+                "actual_cost": flt(r.actual_cost),
+                "achievement": flt(r.achievement),
+            }
+            for r in doc.worker_assignments
+        ],
+    }
+
+
+@frappe.whitelist()
+def save_actuals(assignment_name, actuals):
+    """Save actual quantities entered on the hub.
+
+    Reuses the controller's own math and guards
+    (calculate_worker_achievements / validate_achievement_totals).
+    Draft docs save normally; submitted docs update the child rows
+    directly since the fields are not allow_on_submit.
+    """
+    actuals = frappe.parse_json(actuals) or {}
+    doc = frappe.get_doc("Task Work Assignment", assignment_name)
+    doc.check_permission("write")
+    if doc.docstatus == 2:
+        frappe.throw(frappe._("{0} is cancelled — actuals can no longer be recorded.").format(doc.name))
+
+    rows_by_name = {r.name: r for r in doc.worker_assignments}
+    touched = []
+    for row_name, qty in actuals.items():
+        row = rows_by_name.get(row_name)
+        if not row:
+            frappe.throw(frappe._("Crew row {0} not found on {1}").format(row_name, assignment_name))
+        if flt(qty) != flt(row.actual_quantity):
+            row.actual_quantity = flt(qty)
+            touched.append(row)
+
+    if not touched:
+        return {"saved": 0}
+
+    doc.calculate_worker_achievements()
+    doc.validate_achievement_totals()
+
+    if doc.docstatus == 0:
+        doc.save()
+    else:
+        for row in touched:
+            row.db_update()
+
+    return {
+        "saved": len(touched),
+        "rows": [
+            {
+                "name": r.name,
+                "actual_cost": flt(r.actual_cost),
+                "achievement": flt(r.achievement),
+            }
+            for r in touched
+        ],
+    }
+
 
 @frappe.whitelist()
 def create_plan(request_name):

@@ -164,11 +164,21 @@ class TaskWorkHub {
 			}
 			frappe.set_route("List", $(this).attr("data-viewall"));
 		});
+		this.$main.find("[data-actuals]").on("click", function (e) {
+			e.stopPropagation();
+			me.open_actuals($(this).attr("data-actuals"));
+		});
 		this.$main.find(".twh-search input").on("input", function () {
 			const q = $(this).val().toLowerCase();
-			me.$main.find(".twh-wcard").each(function () {
-				$(this).toggle($(this).text().toLowerCase().includes(q));
-			});
+			if ($(this).attr("data-filter") === "asg") {
+				me.$main.find(".twh-asgtable tbody tr").each(function () {
+					$(this).toggle($(this).text().toLowerCase().includes(q));
+				});
+			} else {
+				me.$main.find(".twh-wcard").each(function () {
+					$(this).toggle($(this).text().toLowerCase().includes(q));
+				});
+			}
 		});
 	}
 
@@ -327,35 +337,127 @@ class TaskWorkHub {
 		const sub = `${asg.total} ${__("running, most urgent first")}${attention.length ? " · " + attention.join(" · ") : ""}`;
 		const overflow =
 			asg.total > rows.length
-				? `<div class="twh-card" style="margin-top:14px;text-align:center">
-					<button class="twh-btn ghost" data-viewall="Task Work Assignment" data-viewall-filters="${this.esc(JSON.stringify({ stage: ["in", ["Pending", "In Progress"]], docstatus: 1 }))}">${__("Show all {0} assignments", [this.count(asg.total)])}</button>
+				? `<div class="twh-empty small">
+					<button class="twh-btn ghost small" data-viewall="Task Work Assignment" data-viewall-filters="${this.esc(JSON.stringify({ stage: ["in", ["Pending", "In Progress"]] }))}">${__("Show all {0} assignments", [this.count(asg.total)])}</button>
 				</div>`
 				: "";
+		const trs = rows
+			.map((a) => {
+				const chip =
+					a.spend_pct > 100
+						? `<span class="twh-sev hot">${a.spend_pct}% ${__("of budget")}</span>`
+						: a.docstatus === 0
+						? `<span class="twh-sev ink">${__("draft")}</span>`
+						: a.ends_soon
+						? `<span class="twh-sev warn">${__("ends soon")}</span>`
+						: `<span class="twh-sev ok">${this.esc((a.stage || "").toLowerCase())}</span>`;
+				const prog = a.days_total ? Math.round((a.day / a.days_total) * 100) : 0;
+				return `
+				<tr data-route-dt="Task Work Assignment" data-route-name="${this.esc(a.name)}">
+					<td><b>${this.esc(a.title || a.name)}</b><div class="sub">${this.esc(a.name)}${a.business_unit ? " · " + this.esc(a.business_unit) : ""}</div></td>
+					<td>${chip}</td>
+					<td class="num">${a.crew}</td>
+					<td class="num">${a.days_total ? `${a.day} / ${a.days_total}` : "—"}</td>
+					<td class="prog"><div class="lane"><i style="width:${Math.min(prog, 100)}%"></i></div></td>
+					<td class="num">${a.spend_pct}%</td>
+					<td class="num">${this.kes(a.total_estimated_cost, true)}</td>
+					<td class="act"><button class="twh-btn small" data-actuals="${this.esc(a.name)}">${__("Enter Actuals")}</button></td>
+				</tr>`;
+			})
+			.join("");
 		const body = rows.length
-			? `<div class="twh-tiles">${rows
-					.map((a) => {
-						const prog = a.days_total ? Math.round((a.day / a.days_total) * 100) : 0;
-						const chip =
-							a.spend_pct > 100
-								? `<span class="twh-sev hot">${a.spend_pct}% ${__("of budget")}</span>`
-								: a.ends_soon
-								? `<span class="twh-sev warn">${__("ends soon")}</span>`
-								: `<span class="twh-sev ok">${this.esc(a.stage.toLowerCase())}</span>`;
-						return `
-					<div class="twh-tile" data-route-dt="Task Work Assignment" data-route-name="${this.esc(a.name)}">
-						<div class="head"><div class="t">${this.esc(a.title || a.name)}</div>${chip}</div>
-						<div class="stats">
-							<div><small>${__("Crew")}</small><b>${a.crew}</b></div>
-							<div><small>${__("Day")}</small><b>${a.days_total ? `${a.day} / ${a.days_total}` : "—"}</b></div>
-							<div><small>${__("Spend")}</small><b>${a.spend_pct}%</b></div>
-							<div><small>${__("KES est.")}</small><b>${this.kes(a.total_estimated_cost, true)}</b></div>
-						</div>
-						<div class="bar"><i style="width:${Math.min(prog, 100)}%"></i></div>
-					</div>`;
-					})
-					.join("")}</div>`
+			? `<div class="twh-card">
+				<div class="twh-cardhead">
+					<div class="twh-search"><input type="text" data-filter="asg" placeholder="${__("Filter by title, unit, id…")}"></div>
+					<span class="meta">${__("click a row to open · Enter Actuals records work done")}</span>
+				</div>
+				<table class="twh-table twh-asgtable">
+					<thead><tr><th>${__("Assignment")}</th><th>${__("Status")}</th><th class="num">${__("Crew")}</th><th class="num">${__("Day")}</th><th></th><th class="num">${__("Spend")}</th><th class="num">${__("Est. KES")}</th><th></th></tr></thead>
+					<tbody>${trs}</tbody>
+				</table>
+				${overflow}
+			</div>`
 			: `<div class="twh-card"><div class="twh-empty">${__("No running assignments. Create one from a submitted plan on the Pipeline view.")}</div></div>`;
-		return `${this.pagehead(__("Assignments"), sub)}${body}${overflow}`;
+		return `${this.pagehead(__("Assignments"), sub)}${body}`;
+	}
+
+	// ------------------------------------------------------- actuals editor
+
+	open_actuals(name) {
+		frappe
+			.call("kaitet_taskwork.kaitet_taskwork.page.task_work_hub.task_work_hub.get_assignment_actuals", {
+				assignment_name: name,
+			})
+			.then((r) => this.show_actuals_dialog(r.message));
+	}
+
+	show_actuals_dialog(doc) {
+		const me = this;
+		const trs = doc.rows
+			.map(
+				(r) => `
+			<tr data-row="${this.esc(r.name)}" data-rate="${r.rate}" data-assigned="${r.quantity_assigned}">
+				<td><div class="who"><i>${this.esc(this.initials(r.worker))}</i><b>${this.esc(r.worker || "")}</b></div><div class="sub">${this.esc(r.task || "")}</div></td>
+				<td class="num">${r.quantity_assigned}${r.uom ? " " + this.esc(r.uom) : ""}</td>
+				<td class="num">${this.kes(r.rate)}</td>
+				<td class="inp"><input type="number" min="0" step="any" class="twh-actual" value="${r.actual_quantity || ""}" placeholder="0"></td>
+				<td class="num cost">${this.kes(r.actual_cost)}</td>
+				<td class="num achv">${r.achievement ? r.achievement + "%" : "—"}</td>
+			</tr>`
+			)
+			.join("");
+
+		const d = new frappe.ui.Dialog({
+			title: __("Enter Actuals · {0}", [doc.title]),
+			size: "extra-large",
+			fields: [{ fieldtype: "HTML", fieldname: "body" }],
+			primary_action_label: __("Save Actuals"),
+			primary_action: () => {
+				const actuals = {};
+				d.$wrapper.find("tr[data-row]").each(function () {
+					const v = $(this).find("input.twh-actual").val();
+					if (v !== "") actuals[$(this).attr("data-row")] = flt(v);
+				});
+				d.get_primary_btn().prop("disabled", true);
+				frappe
+					.call("kaitet_taskwork.kaitet_taskwork.page.task_work_hub.task_work_hub.save_actuals", {
+						assignment_name: doc.name,
+						actuals: actuals,
+					})
+					.then((r) => {
+						frappe.show_alert({
+							message: __("Saved actuals for {0} workers", [r.message.saved]),
+							indicator: "green",
+						});
+						d.hide();
+						me.load(true);
+					})
+					.finally(() => d.get_primary_btn().prop("disabled", false));
+			},
+		});
+
+		d.get_field("body").$wrapper.html(`
+			<div class="twhub twhub--dialog">
+				<div class="meta" style="margin-bottom:10px;color:var(--twh-mute)">
+					${doc.docstatus === 0 ? __("Draft — saving keeps it editable until you submit") : __("Submitted — actuals update directly")}
+					· ${doc.rows.length} ${__("crew rows")}
+				</div>
+				<table class="twh-table">
+					<thead><tr><th>${__("Worker / Task")}</th><th class="num">${__("Assigned")}</th><th class="num">${__("Rate")}</th><th class="num">${__("Actual Qty")}</th><th class="num">${__("Cost")}</th><th class="num">${__("Achieved")}</th></tr></thead>
+					<tbody>${trs}</tbody>
+				</table>
+			</div>`);
+
+		d.$wrapper.find("input.twh-actual").on("input", function () {
+			const $tr = $(this).closest("tr");
+			const qty = flt($(this).val());
+			const rate = flt($tr.attr("data-rate"));
+			const assigned = flt($tr.attr("data-assigned"));
+			$tr.find(".cost").text(me.kes(qty * rate));
+			$tr.find(".achv").text(assigned ? Math.round((qty / assigned) * 100) + "%" : "—");
+		});
+
+		d.show();
 	}
 
 	// ---------------------------------------------------------------- workers
@@ -715,6 +817,15 @@ class TaskWorkHub {
 		.twh-table td b{color:var(--twh-ink);font-weight:600}
 		.twh-table .who{display:flex;align-items:center;gap:9px}
 		.twh-table .who i{width:26px;height:26px;border-radius:50%;background:var(--twh-grad-clay);color:#fff;font-size:9px;font-weight:600;display:grid;place-items:center;font-style:normal;flex-shrink:0}
+		.twh-table .sub{font-size:10.5px;color:var(--twh-mute);font-weight:400;margin-top:1px}
+		.twh-asgtable td.prog{min-width:90px}
+		.twh-asgtable .lane{height:6px;border-radius:3px;background:rgba(10,10,10,0.06);overflow:hidden}
+		.twh-asgtable .lane i{display:block;height:100%;border-radius:3px;background:var(--twh-grad-clay)}
+		.twh-asgtable td.act{text-align:right;white-space:nowrap}
+		.twhub--dialog{display:block;padding:0;margin:0;background:transparent}
+		.twh-table td.inp{text-align:right}
+		.twh-table input.twh-actual{width:96px;border:1px solid rgba(10,10,10,0.15);border-radius:8px;padding:6px 10px;font-size:13px;text-align:right;color:var(--twh-ink);background:var(--twh-card);outline:none;font-variant-numeric:tabular-nums}
+		.twh-table input.twh-actual:focus{border-color:var(--twh-clay);box-shadow:0 0 0 2px rgba(194,90,46,0.15)}
 		.twh-wk{display:grid;grid-template-columns:repeat(26,1fr);gap:4px}
 		.twh-wk span{aspect-ratio:1;border-radius:4px;background:rgba(10,10,10,0.05);cursor:pointer}
 		.twh-wk span.p{background:rgba(63,143,79,0.55)}
