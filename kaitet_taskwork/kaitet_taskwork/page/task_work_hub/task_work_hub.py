@@ -742,8 +742,21 @@ def save_actuals(assignment_name, actuals):
     }
 
 
+def _worker_names(worker_ids):
+    if not worker_ids:
+        return {}
+    return {
+        w.name: w.full_name
+        for w in frappe.get_all(
+            "Task Worker",
+            filters={"name": ("in", worker_ids)},
+            fields=["name", "full_name"],
+        )
+    }
+
+
 @frappe.whitelist()
-def create_plan(request_name, expected_start_date=None, note=None):
+def create_plan(request_name, expected_start_date=None, note=None, workers=None):
     from kaitet_taskwork.kaitet_taskwork.doctype.task_work_request.task_work_request import (
         create_plan_from_request,
     )
@@ -753,19 +766,29 @@ def create_plan(request_name, expected_start_date=None, note=None):
     result = create_plan_from_request(request_name)
     name = result.get("name") if isinstance(result, dict) else result
 
-    if expected_start_date or note:
+    workers = frappe.parse_json(workers) if workers else []
+    if expected_start_date or workers:
         plan = frappe.get_doc("Task Work Plan", name)
         if expected_start_date:
             plan.custom_expected_start_date = expected_start_date
-            plan.save()
-        if note:
-            plan.add_comment("Comment", note)
+        if workers:
+            names = _worker_names(workers)
+            for w in workers:
+                plan.append("suggested_employees", {
+                    "task_worker": w,
+                    "worker_name": names.get(w) or w,
+                    "selected": 1,
+                })
+            plan.total_workers_planned = len(workers)
+        plan.save()
+    if note:
+        frappe.get_doc("Task Work Plan", name).add_comment("Comment", note)
 
-    return {"doctype": "Task Work Plan", "name": name}
+    return {"doctype": "Task Work Plan", "name": name, "workers": len(workers)}
 
 
 @frappe.whitelist()
-def create_assignment(plan_name, start_date=None, expected_end_date=None, note=None):
+def create_assignment(plan_name, start_date=None, expected_end_date=None, note=None, workers=None):
     from kaitet_taskwork.kaitet_taskwork.doctype.task_work_plan.task_work_plan import (
         create_assignment_from_plan,
     )
@@ -774,19 +797,199 @@ def create_assignment(plan_name, start_date=None, expected_end_date=None, note=N
         frappe.throw(frappe._("Not permitted to create Task Work Assignments"), frappe.PermissionError)
     name = create_assignment_from_plan(plan_name)
 
-    if start_date or expected_end_date or note:
-        doc = frappe.get_doc("Task Work Assignment", name)
-        if start_date:
-            doc.start_date = start_date
-            doc.expected_start_date = doc.expected_start_date or start_date
-        if expected_end_date:
-            doc.expected_end_date = expected_end_date
-        if start_date or expected_end_date:
-            doc.save()
-        if note:
-            doc.add_comment("Comment", note)
+    workers = frappe.parse_json(workers) if workers else []
+    if not workers:
+        # fall back to the workers the planner marked as selected
+        workers = [
+            s.task_worker
+            for s in frappe.get_all(
+                "TW Suggested Employee",
+                filters={"parent": plan_name, "parenttype": "Task Work Plan", "selected": 1},
+                fields=["task_worker"],
+            )
+            if s.task_worker
+        ]
 
-    return {"doctype": "Task Work Assignment", "name": name}
+    doc = frappe.get_doc("Task Work Assignment", name)
+    if start_date:
+        doc.start_date = start_date
+        doc.expected_start_date = start_date
+    if expected_end_date:
+        doc.expected_end_date = expected_end_date
+    elif start_date and doc.expected_end_date and getdate(doc.expected_end_date) < getdate(start_date):
+        # inherited end date predates the chosen start — drop it
+        doc.expected_end_date = None
+
+    if workers and doc.task_details:
+        # spread the crew across task lines: each task takes its requested
+        # headcount from the pool (round-robin), splitting the task's total
+        # work equally among its workers
+        names = _worker_names(workers)
+        pool = list(workers)
+        cursor = 0
+        for td in doc.task_details:
+            take = min(cint(td.workers) or len(pool), len(pool))
+            chosen = [pool[(cursor + i) % len(pool)] for i in range(take)]
+            cursor += take
+            share = flt(td.total_work) / take if take else 0
+            for w in chosen:
+                doc.append("worker_assignments", {
+                    "task": td.task,
+                    "employee_name": w,
+                    "worker_full_name": names.get(w) or w,
+                    "assignment_date": start_date or nowdate(),
+                    "uom": td.uom,
+                    "daily_target": td.daily_target,
+                    "quantity_assigned": share,
+                    "days": td.days,
+                    "rate": td.rate,
+                    "total_assigned_cost": share * flt(td.rate),
+                    "manually_assigned": 1,
+                })
+
+    doc.save()
+    if note:
+        doc.add_comment("Comment", note)
+
+    return {"doctype": "Task Work Assignment", "name": name, "crew": len(doc.worker_assignments)}
+
+
+@frappe.whitelist()
+def create_change_request(assignment_name, change_type, new_employee, old_employee=None, reason=None):
+    """Raise a TW Employee Change Request from the actuals editor."""
+    if not frappe.has_permission("TW Employee Change Request", "create"):
+        frappe.throw(frappe._("Not permitted to raise employee change requests"), frappe.PermissionError)
+    if change_type == "Replace Employee" and not old_employee:
+        frappe.throw(frappe._("Pick the worker being replaced"))
+
+    doc = frappe.new_doc("TW Employee Change Request")
+    doc.task_work_assignment = assignment_name
+    doc.change_type = change_type
+    doc.old_employee = old_employee
+    doc.new_employee = new_employee
+    doc.reason = reason
+    doc.status = "Pending HR Approval"
+    doc.requested_by = frappe.session.user
+    doc.request_date = nowdate()
+    doc.insert()
+    return {"name": doc.name, "status": doc.status}
+
+
+@frappe.whitelist()
+def get_planner_data(week_start=None):
+    """Week capacity board: who is deployed where each day, utilization,
+    double-booked workers and idle workers."""
+    today = getdate(nowdate())
+    if week_start:
+        week_start = getdate(week_start)
+    else:
+        week_start = add_days(today, -today.weekday())
+    week_end = add_days(week_start, 6)
+
+    rows = frappe.get_list(
+        "Task Work Assignment",
+        filters={"docstatus": ("<", 2), "stage": ("!=", "Cancelled")},
+        fields=[
+            "name", "title", "stage", "business_unit", "unitdivision",
+            "start_date", "completion_date", "expected_start_date", "expected_end_date",
+        ],
+        limit_page_length=0,
+    )
+
+    def span(r):
+        start = r.get("start_date") or r.get("expected_start_date")
+        end = r.get("completion_date") or r.get("expected_end_date") or start
+        return (getdate(start) if start else None, getdate(end) if end else None)
+
+    active = []
+    for r in rows:
+        start, end = span(r)
+        if not start:
+            continue
+        if start <= week_end and (not end or end >= week_start):
+            r["_start"], r["_end"] = start, end or week_end
+            active.append(r)
+
+    names = [r["name"] for r in active]
+    crew = frappe.get_all(
+        "Worker Assignments",
+        filters={"parent": ("in", names), "parenttype": "Task Work Assignment"},
+        fields=["parent", "employee_name", "worker_full_name"],
+    ) if names else []
+    crew_by_parent = {}
+    for c in crew:
+        crew_by_parent.setdefault(c.parent, []).append(c)
+
+    days = [add_days(week_start, i) for i in range(7)]
+    lanes = []
+    deployed_by_day = [set() for _ in range(7)]
+    worker_load = {}
+
+    for r in sorted(active, key=lambda x: str(x["_start"])):
+        members = crew_by_parent.get(r["name"], [])
+        cells = []
+        for i, day in enumerate(days):
+            on = r["_start"] <= day <= r["_end"]
+            cells.append(len(members) if on else None)
+            if on:
+                for m in members:
+                    if m.employee_name:
+                        deployed_by_day[i].add(m.employee_name)
+        for m in members:
+            if m.employee_name:
+                worker_load.setdefault(
+                    m.employee_name,
+                    {"name": m.worker_full_name or m.employee_name, "assignments": []},
+                )["assignments"].append({
+                    "assignment": r["name"],
+                    "title": r["title"] or r["name"],
+                    "start": str(r["_start"]),
+                    "end": str(r["_end"]),
+                })
+        lanes.append({
+            "name": r["name"],
+            "title": r["title"] or r["name"],
+            "stage": r["stage"],
+            "bu": r.get("business_unit"),
+            "crew": len(members),
+            "cells": cells,
+        })
+
+    # double-booked: a worker on 2+ assignments with overlapping ranges
+    double_booked = []
+    for wid, info in worker_load.items():
+        if len(info["assignments"]) < 2:
+            continue
+        asgs = sorted(info["assignments"], key=lambda a: a["start"])
+        overlaps = any(
+            asgs[i]["end"] >= asgs[i + 1]["start"] for i in range(len(asgs) - 1)
+        )
+        if overlaps:
+            double_booked.append({"worker": wid, "name": info["name"], "assignments": asgs})
+
+    all_active = frappe.get_list(
+        "Task Worker",
+        filters={"status": "Active"},
+        fields=["name", "full_name"],
+        limit_page_length=0,
+    )
+    deployed_ids = set(worker_load.keys())
+    idle = [w for w in all_active if w["name"] not in deployed_ids]
+
+    return {
+        "week_start": str(week_start),
+        "week_end": str(week_end),
+        "today": str(today),
+        "days": [str(x) for x in days],
+        "lanes": lanes[:40],
+        "lanes_total": len(lanes),
+        "deployed_by_day": [len(s) for s in deployed_by_day],
+        "capacity": len(all_active),
+        "double_booked": double_booked[:20],
+        "double_booked_total": len(double_booked),
+        "idle": idle[:30],
+        "idle_total": len(idle),
+    }
 
 
 @frappe.whitelist()

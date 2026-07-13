@@ -130,13 +130,15 @@
    "fetch_from": "task_work_request.custom_expected_start_date",
    "fieldname": "expected_start_date",
    "fieldtype": "Date",
-   "label": "Expected Start Date"
+   "label": "Expected Start Date",
+   "fetch_if_empty": 1
   },
   {
    "fetch_from": "task_work_request.custom_expected_end_date",
    "fieldname": "expected_end_date",
    "fieldtype": "Date",
-   "label": "Expected End Date"
+   "label": "Expected End Date",
+   "fetch_if_empty": 1
   },
   {
    "fieldname": "section_break_jjun",

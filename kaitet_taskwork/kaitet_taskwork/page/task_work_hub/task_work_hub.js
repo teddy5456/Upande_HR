@@ -27,7 +27,7 @@ class TaskWorkHub {
 	constructor(page) {
 		this.page = page;
 		this.$main = $(page.main);
-		this.views = ["overview", "pipeline", "assignments", "workers", "disbursements"];
+		this.views = ["overview", "pipeline", "assignments", "workers", "disbursements", "planner"];
 		const route_view = frappe.get_route()[1];
 		this.view = this.views.includes(route_view) ? route_view : "overview";
 		this.collapsed = localStorage.getItem("twhub_sidebar") === "collapsed";
@@ -46,6 +46,7 @@ class TaskWorkHub {
 				this.data = r.message;
 				this.loaded_once = true;
 				this.render();
+				if (this.view === "planner" && !this.planner) this.fetch_planner();
 			});
 	}
 
@@ -116,6 +117,7 @@ class TaskWorkHub {
 			["assignments", __("Assignments"), d.assignments.total],
 			["workers", __("Workers"), d.workers.total],
 			["disbursements", __("Disbursements"), d.disbursements.list.length],
+			["planner", __("Planner"), ""],
 		];
 		const nav = views
 			.map(
@@ -137,7 +139,9 @@ class TaskWorkHub {
 						<svg viewBox="0 0 24 24">${chevron}</svg>
 					</button>
 					<div class="twh-label">${__("Views")}</div>
-					<nav class="twh-nav">${nav}</nav>
+					<nav class="twh-nav">${nav}
+						<a class="twh-navlink twh-desklink" title="${__("Back to Desk")}">${this.icon("desk")}<span class="lbl">${__("Desk")}</span></a>
+					</nav>
 					<div class="twh-collapsible">
 						<div class="twh-label" style="margin-top:18px">${__("Week")} ${d.week.number} · ${frappe.datetime.str_to_user(d.week.start)} – ${frappe.datetime.str_to_user(d.week.end)}</div>
 						<div class="twh-stats">
@@ -168,9 +172,16 @@ class TaskWorkHub {
 			localStorage.setItem("twhub_sidebar", me.collapsed ? "collapsed" : "open");
 			me.render();
 		});
-		this.$main.find(".twh-navlink").on("click", function () {
+		this.$main.find(".twh-navlink[data-view]").on("click", function () {
 			me.view = $(this).data("view");
 			me.render();
+			if (me.view === "planner" && !me.planner) me.fetch_planner();
+		});
+		this.$main.find(".twh-desklink").on("click", function () {
+			window.location.href = "/app/task-work";
+		});
+		this.$main.find("[data-plweek]").on("click", function () {
+			me.fetch_planner($(this).attr("data-plweek") || null);
 		});
 		this.$main.find("[data-route-dt]").on("click", function (e) {
 			e.stopPropagation();
@@ -461,10 +472,10 @@ class TaskWorkHub {
 	kcard(c, col) {
 		const draggable = ["requested", "planned", "running"].includes(col) && !c.draft;
 		return `
-			<div class="twh-kcard tone-${c.tone} ${draggable ? "grab" : ""}" ${draggable ? 'draggable="true"' : ""}
+			<div class="twh-kcard ${draggable ? "grab" : ""}" ${draggable ? 'draggable="true"' : ""}
 				data-col="${col}" data-bu="${this.esc(c.bu || "")}" data-card="${this.esc(JSON.stringify(c))}"
 				data-route-dt="${this.esc(c.doctype)}" data-route-name="${this.esc(c.id)}">
-				<div class="id">${this.esc(c.id)}${draggable ? `<span class="grip" title="${__("Drag to advance")}">⋮⋮</span>` : ""}</div>
+				<div class="id"><span class="dot ${c.tone}"></span>${this.esc(c.id)}${draggable ? `<span class="grip" title="${__("Drag to advance")}">⋮⋮</span>` : ""}</div>
 				<div class="t">${this.esc(c.name)}</div>
 				<div class="m">${this.esc(c.meta)}</div>
 				<div class="foot"><span class="twh-sev ${c.tone}">${this.esc(c.badge)}</span><span class="kes">${this.kes(c.amount)}</span></div>
@@ -505,9 +516,15 @@ class TaskWorkHub {
 		this.transition_dialog({
 			title: __("Plan · {0}", [card.name]),
 			summary: `${this.icon("request")} <b>${this.esc(card.name)}</b><div class="sub">${this.esc(card.meta)} · ${__("est.")} KES ${this.kes(card.amount)}</div>
-				<div class="hint">${__("Creates a Task Work Plan pre-filled from this request — workers get picked on the plan.")}</div>`,
+				<div class="hint">${__("Creates a Task Work Plan pre-filled from this request. Workers picked here become the plan's selected suggestions.")}</div>`,
 			fields: [
 				{ fieldtype: "Date", fieldname: "expected_start_date", label: __("Expected Start Date"), default: frappe.datetime.add_days(frappe.datetime.get_today(), 1) },
+				{
+					fieldtype: "MultiSelectList",
+					fieldname: "workers",
+					label: __("Suggest workers"),
+					get_data: (txt) => frappe.db.get_link_options("Task Worker", txt, { status: "Active" }),
+				},
 				{ fieldtype: "Small Text", fieldname: "note", label: __("Note for the planner (optional)") },
 			],
 			action_label: __("Create Plan"),
@@ -517,6 +534,7 @@ class TaskWorkHub {
 						request_name: card.id,
 						expected_start_date: v.expected_start_date,
 						note: v.note,
+						workers: v.workers || [],
 					})
 					.then((r) => {
 						d.hide();
@@ -533,10 +551,16 @@ class TaskWorkHub {
 		this.transition_dialog({
 			title: __("Assign · {0}", [card.name]),
 			summary: `${this.icon("plan")} <b>${this.esc(card.name)}</b><div class="sub">${this.esc(card.meta)} · ${__("est.")} KES ${this.kes(card.amount)}</div>
-				<div class="hint">${__("Creates a Task Work Assignment with this plan's crew — adjust workers on the assignment before submitting.")}</div>`,
+				<div class="hint">${__("Creates the assignment and spreads the crew across its task lines - fine-tune quantities on the form if needed.")}</div>`,
 			fields: [
 				{ fieldtype: "Date", fieldname: "start_date", label: __("Start Date"), default: card.start || frappe.datetime.get_today(), reqd: 1 },
 				{ fieldtype: "Date", fieldname: "expected_end_date", label: __("Expected End Date") },
+				{
+					fieldtype: "MultiSelectList",
+					fieldname: "workers",
+					label: __("Crew (leave empty to use the plan's selected workers)"),
+					get_data: (txt) => frappe.db.get_link_options("Task Worker", txt, { status: "Active" }),
+				},
 				{ fieldtype: "Small Text", fieldname: "note", label: __("Note for the supervisor (optional)") },
 			],
 			action_label: __("Create Assignment"),
@@ -547,6 +571,7 @@ class TaskWorkHub {
 						start_date: v.start_date,
 						expected_end_date: v.expected_end_date,
 						note: v.note,
+						workers: v.workers || [],
 					})
 					.then((r) => {
 						d.hide();
@@ -676,7 +701,8 @@ class TaskWorkHub {
 		const row_html = (r) => `
 			<tr data-row="${this.esc(r.name)}" data-rate="${r.rate}" data-assigned="${r.quantity_assigned}" data-task="${this.esc(r.task || "")}">
 				<td><div class="who"><i>${this.esc(this.initials(r.worker))}</i>
-					<span><b>${this.esc(r.worker || "")}</b><div class="sub">#${this.esc(r.payroll_number || "")}${r.payment_method ? " · " + this.esc(r.payment_method) : ""}${r.phone ? " · " + this.esc(r.phone) : ""}</div></span></div></td>
+					<span><b>${this.esc(r.worker || "")}</b><div class="sub">#${this.esc(r.payroll_number || "")}${r.payment_method ? " · " + this.esc(r.payment_method) : ""}${r.phone ? " · " + this.esc(r.phone) : ""}</div></span>
+					<button class="twh-repl" data-wid="${this.esc(r.worker_id || "")}" data-wname="${this.esc(r.worker || "")}" title="${__("Request replacement")}">${this.icon("swap")}</button></div></td>
 				<td class="num">${r.quantity_assigned}${r.uom ? " " + this.esc(r.uom) : ""}<div class="sub">${r.days ? r.days + " " + __("days") : ""}${r.daily_target ? " · " + r.daily_target + "/" + __("day") : ""}</div></td>
 				<td class="num">${this.kes(r.rate)}</td>
 				<td class="inp">
@@ -753,6 +779,7 @@ class TaskWorkHub {
 					<span class="meta">${this.icon("chart")} ${__("est.")} KES ${this.kes(doc.total_estimated_cost)}</span>
 					${doc.rows.length > 8 ? `<div class="twh-search"><input type="text" data-filter="actuals" placeholder="${__("Find worker…")}"></div>` : ""}
 					<button class="twh-btn ghost small twh-fillall">${this.icon("zap")}${__("Fill all = assigned")}</button>
+					<button class="twh-btn ghost small twh-addwk">${this.icon("change")}${__("Add Worker")}</button>
 				</div>
 				<div class="twh-dlgscroll">
 				<table class="twh-table twh-acttable">
@@ -818,8 +845,51 @@ class TaskWorkHub {
 				$(this).toggle($(this).text().toLowerCase().includes(q));
 			});
 		});
+		d.$wrapper.find(".twh-addwk").on("click", () => me.change_request_dialog(doc.name, "Add Employee"));
+		d.$wrapper.find(".twh-repl").on("click", function (e) {
+			e.stopPropagation();
+			me.change_request_dialog(doc.name, "Replace Employee", $(this).attr("data-wid"), $(this).attr("data-wname"));
+		});
 
 		d.show();
+	}
+
+	change_request_dialog(assignment, change_type, old_id, old_name) {
+		const me = this;
+		const replacing = change_type === "Replace Employee";
+		this.transition_dialog({
+			title: replacing ? __("Replace Worker · {0}", [assignment]) : __("Add Worker · {0}", [assignment]),
+			summary: `${this.icon(replacing ? "swap" : "change")} <b>${this.esc(assignment)}</b>
+				${replacing ? `<div class="sub">${__("Replacing")} <b>${this.esc(old_name || old_id)}</b></div>` : ""}
+				<div class="hint">${__("Raises an Employee Change Request — HR approves it before the crew changes.")}</div>`,
+			fields: [
+				{
+					fieldtype: "Link",
+					fieldname: "new_employee",
+					label: replacing ? __("Replacement worker") : __("Worker to add"),
+					options: "Task Worker",
+					reqd: 1,
+					get_query: () => ({ filters: { status: "Active" } }),
+				},
+				{ fieldtype: "Small Text", fieldname: "reason", label: __("Reason"), reqd: 1 },
+			],
+			action_label: replacing ? __("Request Replacement") : __("Request Addition"),
+			on_submit: (v, d) => {
+				frappe
+					.call("kaitet_taskwork.kaitet_taskwork.page.task_work_hub.task_work_hub.create_change_request", {
+						assignment_name: assignment,
+						change_type: change_type,
+						new_employee: v.new_employee,
+						old_employee: old_id || null,
+						reason: v.reason,
+					})
+					.then((r) => {
+						d.hide();
+						frappe.show_alert({ message: __("{0} raised — pending HR approval", [r.message.name]), indicator: "green" });
+					})
+					.finally(() => d.get_primary_btn().prop("disabled", false));
+			},
+		});
 	}
 
 	// ---------------------------------------------------------------- workers
@@ -973,6 +1043,108 @@ class TaskWorkHub {
 			${table}`;
 	}
 
+	// ----------------------------------------------------------------- planner
+
+	fetch_planner(week_start) {
+		frappe
+			.call("kaitet_taskwork.kaitet_taskwork.page.task_work_hub.task_work_hub.get_planner_data", {
+				week_start: week_start || null,
+			})
+			.then((r) => {
+				this.planner = r.message;
+				this.planner_week = r.message.week_start;
+				if (this.view === "planner") this.render();
+			});
+	}
+
+	render_planner() {
+		const p = this.planner;
+		if (!p) {
+			return `${this.pagehead(__("Week Planner"), __("who is deployed where, day by day"))}
+				<div class="twh-card"><div class="twh-empty">${__("Loading the week…")}</div></div>`;
+		}
+		const peak = Math.max(...p.deployed_by_day, 0);
+		const util = p.capacity ? Math.round((peak / p.capacity) * 100) : 0;
+		const daynames = p.days.map((dt) => {
+			const m = frappe.datetime.str_to_obj(dt);
+			return { d: dt, label: m.toLocaleDateString("en-GB", { weekday: "short" }), num: m.getDate(), today: dt === p.today };
+		});
+
+		const nav = `
+			<div class="pillgroup">
+				<button data-plweek="${frappe.datetime.add_days(p.week_start, -7)}">‹ ${__("Prev")}</button>
+				<button class="on">${frappe.datetime.str_to_user(p.week_start)} – ${frappe.datetime.str_to_user(p.week_end)}</button>
+				<button data-plweek="${frappe.datetime.add_days(p.week_start, 7)}">${__("Next")} ›</button>
+				<button data-plweek="">${__("This week")}</button>
+			</div>`;
+
+		const grid = p.lanes.length
+			? `<table class="twh-table twh-plgrid">
+				<thead><tr><th>${__("Assignment")}</th>${daynames.map((x) => `<th class="num ${x.today ? "today" : ""}">${x.label}<div class="sub">${x.num}</div></th>`).join("")}</tr></thead>
+				<tbody>${p.lanes
+					.map(
+						(l) => `
+					<tr data-route-dt="Task Work Assignment" data-route-name="${this.esc(l.name)}">
+						<td><b>${this.esc(l.title)}</b><div class="sub">${this.esc(l.name)} · ${l.crew} ${__("crew")}${l.bu ? " · " + this.esc(l.bu) : ""}</div></td>
+						${l.cells.map((c, i) => `<td class="plc ${c != null ? "on" : ""} ${daynames[i].today ? "today" : ""}">${c != null ? c : ""}</td>`).join("")}
+					</tr>`
+					)
+					.join("")}</tbody>
+				<tfoot><tr><td>${__("Workers deployed")}</td>${p.deployed_by_day.map((n, i) => `<td class="plc ${daynames[i].today ? "today" : ""}"><b>${n}</b></td>`).join("")}</tr></tfoot>
+			</table>
+			${p.lanes_total > p.lanes.length ? `<div class="twh-empty small">${__("Showing {0} of {1} assignments", [p.lanes.length, p.lanes_total])}</div>` : ""}`
+			: `<div class="twh-empty">${__("No assignments touch this week.")}</div>`;
+
+		const dbl = p.double_booked.length
+			? p.double_booked
+					.map(
+						(w) => `
+				<div class="twh-listrow" data-route-dt="Task Worker" data-route-name="${this.esc(w.worker)}">
+					<div class="rank lead">${this.esc(this.initials(w.name))}</div>
+					<div><div class="t">${this.esc(w.name)}</div>
+						<div class="m">${w.assignments.map((a) => `${this.esc(a.assignment)} (${frappe.datetime.str_to_user(a.start)}–${frappe.datetime.str_to_user(a.end)})`).join(" · ")}</div></div>
+					<div class="qty"><span class="twh-sev hot">${w.assignments.length} ${__("jobs")}</span></div>
+				</div>`
+					)
+					.join("")
+			: `<div class="twh-empty">${this.icon("check")} ${__("Nobody is double-booked this week.")}</div>`;
+
+		const idle = p.idle.length
+			? `<div class="twh-idlechips">${p.idle
+					.map((w) => `<button class="twh-chip" data-route-dt="Task Worker" data-route-name="${this.esc(w.name)}">${this.esc(w.full_name || w.name)}</button>`)
+					.join("")}</div>${p.idle_total > p.idle.length ? `<div class="twh-empty small">+ ${p.idle_total - p.idle.length} ${__("more")}</div>` : ""}`
+			: `<div class="twh-empty">${__("Everyone active is deployed.")}</div>`;
+
+		return `
+			<div class="twh-pagehead">
+				<div class="eyebrow">${__("Kaitet · Task Work · Capacity")}</div>
+				<h1>${__("Week Planner")}</h1>
+				<p>${__("who is deployed where, day by day — spot gaps, clashes and idle hands before Monday")}</p>
+			</div>
+			<div class="twh-buchips" style="justify-content:flex-start">${nav}</div>
+			<div class="twh-kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+				<div class="twh-kpi"><div class="l">${__("Capacity")}</div><div class="v">${p.capacity}</div><div class="u">${__("active registered workers")}</div></div>
+				<div class="twh-kpi"><div class="l">${__("Peak Deployed")}</div><div class="v">${peak}</div><div class="u">${__("workers on the busiest day")}</div></div>
+				<div class="twh-kpi"><div class="l">${__("Utilization")}</div><div class="v">${util}<small>%</small></div><div class="u">${__("peak vs capacity")}</div></div>
+				<div class="twh-kpi"><div class="l">${__("Double-booked")}</div><div class="v">${p.double_booked_total}</div><div class="u">${__("workers on clashing jobs")}</div></div>
+				<div class="twh-kpi"><div class="l">${__("Idle")}</div><div class="v">${p.idle_total}</div><div class="u">${__("active but not deployed")}</div></div>
+			</div>
+			<div class="twh-card">
+				<div class="twh-cardhead"><h3>${this.icon("planner")}${__("Deployment Grid")}</h3><span class="meta">${__("cell = crew size scheduled that day · click a row to open")}</span></div>
+				${grid}
+			</div>
+			<div class="twh-row2eq">
+				<div class="twh-card">
+					<div class="twh-cardhead"><h3>${this.icon("x")}${__("Double-booked Workers")}</h3><span class="meta">${__("same worker, overlapping assignments")}</span></div>
+					<div class="twh-list">${dbl}</div>
+				</div>
+				<div class="twh-card">
+					<div class="twh-cardhead"><h3>${this.icon("workers")}${__("Idle This Week")}</h3><span class="meta">${__("available to plug gaps — click to open")}</span></div>
+					${idle}
+				</div>
+			</div>`;
+	}
+
 	// ------------------------------------------------------------- components
 
 	pagehead(title, sub) {
@@ -1074,6 +1246,9 @@ class TaskWorkHub {
 			target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
 			chart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
 			calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+			planner: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><rect x="7" y="14" width="4" height="4" rx="1"/>',
+			desk: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+			swap: '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
 			search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
 			zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
 			plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
@@ -1144,6 +1319,7 @@ class TaskWorkHub {
 		.twh-row2{display:grid;grid-template-columns:2fr 1fr;gap:14px}
 		.twh-row2eq{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 		.twh-empty{padding:22px;text-align:center;color:var(--twh-mute)}
+		.twh-empty svg{width:14px;height:14px;stroke:var(--twh-ok);fill:none;stroke-width:2;vertical-align:-2px;margin-right:6px}
 		.twh-empty.small{padding:10px;font-size:11.5px}
 		.twh-btn{border:0;background:var(--twh-grad-ink);color:#fafaf6;font-weight:600;font-size:12px;padding:8px 16px;border-radius:999px;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(10,10,10,0.16);transition:all .15s}
 		.twh-btn:hover{transform:translateY(-1px);color:#fff}
@@ -1246,12 +1422,14 @@ class TaskWorkHub {
 		.twh-kcol .head{display:flex;align-items:center;gap:8px;padding:2px 6px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--twh-ink4)}
 		.twh-kcol .head i{width:8px;height:8px;border-radius:3px}
 		.twh-kcol .head b{margin-left:auto;font-size:10px;background:rgba(10,10,10,0.06);border-radius:99px;padding:1px 8px}
-		.twh-kcard{background:var(--twh-card);border-radius:14px;padding:13px 15px;box-shadow:var(--twh-shadow);margin-bottom:9px;cursor:pointer;border-left:3px solid transparent;transition:all .15s}
+		.twh-kcard{background:var(--twh-card);border-radius:14px;padding:13px 15px;box-shadow:var(--twh-shadow);margin-bottom:9px;cursor:pointer;transition:all .15s}
 		.twh-kcard:hover{transform:translateY(-2px)}
-		.twh-kcard.tone-hot{border-left-color:var(--twh-hot)}
-		.twh-kcard.tone-warn{border-left-color:var(--twh-warn)}
-		.twh-kcard.tone-ok{border-left-color:var(--twh-ok)}
-		.twh-kcard.tone-clay{border-left-color:var(--twh-clay)}
+		.twh-kcard .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:7px;vertical-align:1px;background:var(--twh-mute);box-shadow:0 0 0 3px rgba(10,10,10,0.05)}
+		.twh-kcard .dot.hot{background:var(--twh-hot);box-shadow:0 0 0 3px rgba(196,48,43,0.14)}
+		.twh-kcard .dot.warn{background:var(--twh-warn);box-shadow:0 0 0 3px rgba(217,150,46,0.16)}
+		.twh-kcard .dot.ok{background:var(--twh-ok);box-shadow:0 0 0 3px rgba(63,143,79,0.14)}
+		.twh-kcard .dot.clay{background:var(--twh-clay);box-shadow:0 0 0 3px rgba(194,90,46,0.15)}
+		.twh-kcard .dot.ink{background:var(--twh-ink3);box-shadow:0 0 0 3px rgba(10,10,10,0.08)}
 		.twh-kcard .id{font-size:9.5px;font-family:var(--font-stack-mono, monospace);letter-spacing:.4px;color:var(--twh-mute);margin-bottom:3px}
 		.twh-kcard .t{font-weight:600;font-size:12.5px;color:var(--twh-ink);line-height:1.3}
 		.twh-kcard .m{font-size:11px;color:var(--twh-mute);margin-top:3px}
@@ -1299,6 +1477,16 @@ class TaskWorkHub {
 		.twh-table td.inp{text-align:right}
 		.twh-table input.twh-actual{width:96px;border:1px solid rgba(10,10,10,0.15);border-radius:8px;padding:6px 10px;font-size:13px;text-align:right;color:var(--twh-ink);background:var(--twh-card);outline:none;font-variant-numeric:tabular-nums}
 		.twh-table input.twh-actual:focus{border-color:var(--twh-clay);box-shadow:0 0 0 2px rgba(194,90,46,0.15)}
+		.twh-plgrid th .sub{font-size:10px;color:var(--twh-mute);font-weight:400}
+		.twh-plgrid .plc{text-align:center;font-variant-numeric:tabular-nums;min-width:44px}
+		.twh-plgrid .plc.on{background:rgba(194,90,46,0.13);font-weight:600;color:var(--twh-clay-deep)}
+		.twh-plgrid th.today,.twh-plgrid td.today{box-shadow:inset 0 0 0 1.5px rgba(10,10,10,0.18)}
+		.twh-plgrid tfoot td{font-weight:600;color:var(--twh-ink);background:rgba(10,10,10,0.02);border-top:2px solid rgba(10,10,10,0.10)}
+		.twh-idlechips{display:flex;flex-wrap:wrap;gap:6px}
+		.twh-repl{border:0;background:rgba(10,10,10,0.05);color:var(--twh-ink4);width:24px;height:24px;border-radius:8px;cursor:pointer;display:inline-grid;place-items:center;margin-left:8px;flex-shrink:0;transition:all .15s}
+		.twh-repl:hover{background:var(--twh-ink);color:#fff}
+		.twh-repl svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.2}
+		.twh-desklink{margin-top:8px;border-top:1px solid var(--twh-hair);padding-top:10px;border-radius:0 0 10px 10px;color:var(--twh-mute)}
 		.twh-wk{display:grid;grid-template-columns:repeat(26,1fr);gap:4px}
 		.twh-wk span{aspect-ratio:1;border-radius:4px;background:rgba(10,10,10,0.05);cursor:pointer}
 		.twh-wk span.p{background:rgba(63,143,79,0.55)}
