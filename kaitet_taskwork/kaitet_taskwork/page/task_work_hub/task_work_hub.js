@@ -32,6 +32,7 @@ class TaskWorkHub {
 		this.view = this.views.includes(route_view) ? route_view : "overview";
 		this.collapsed = localStorage.getItem("twhub_sidebar") === "collapsed";
 		this.inject_css();
+		this.setup_realtime();
 		this.load();
 	}
 
@@ -77,6 +78,32 @@ class TaskWorkHub {
 
 	count(n) {
 		return n >= 100 ? n + "+" : n;
+	}
+
+	greeting() {
+		const h = new Date().getHours();
+		const g = h < 12 ? __("Good morning") : h < 17 ? __("Good afternoon") : __("Good evening");
+		const name = (frappe.session.user_fullname || "").split(" ")[0];
+		return name && name !== "Administrator" ? `${g}, ${name}` : g;
+	}
+
+	setup_realtime() {
+		// live board: any change to a task work doctype refreshes the hub
+		// quietly (debounced, only while the page is actually visible)
+		const doctypes = new Set([
+			"Task Work Request",
+			"Task Work Plan",
+			"Task Work Assignment",
+			"TW Weekly Disbursement",
+			"TW Employee Change Request",
+			"Task Worker",
+		]);
+		frappe.realtime.on("list_update", (data) => {
+			if (!data || !doctypes.has(data.doctype)) return;
+			if (!$(this.page.wrapper).is(":visible")) return;
+			clearTimeout(this._rt_timer);
+			this._rt_timer = setTimeout(() => this.load(true), 1500);
+		});
 	}
 
 	// ----------------------------------------------------------------- render
@@ -183,6 +210,46 @@ class TaskWorkHub {
 			e.stopPropagation();
 			me.open_actuals($(this).attr("data-actuals"));
 		});
+		// board drag & drop — advance a card to the next column
+		this.$main.find(".twh-kcard[draggable]").on("dragstart", function (e) {
+			const from = $(this).attr("data-col");
+			me._drag = { card: JSON.parse($(this).attr("data-card")), from: from };
+			$(this).addClass("dragging");
+			me.$main.find(`.twh-kcol[data-col="${me.next_col(from)}"]`).addClass("droppable");
+			e.originalEvent.dataTransfer.effectAllowed = "move";
+			e.originalEvent.dataTransfer.setData("text/plain", from);
+		});
+		this.$main.find(".twh-kcard[draggable]").on("dragend", function () {
+			$(this).removeClass("dragging");
+			me.$main.find(".twh-kcol").removeClass("droppable over");
+		});
+		this.$main
+			.find(".twh-kcol")
+			.on("dragover", function (e) {
+				if ($(this).hasClass("droppable")) {
+					e.preventDefault();
+					$(this).addClass("over");
+				}
+			})
+			.on("dragleave", function () {
+				$(this).removeClass("over");
+			})
+			.on("drop", function (e) {
+				if (!$(this).hasClass("droppable") || !me._drag) return;
+				e.preventDefault();
+				const { card, from } = me._drag;
+				me._drag = null;
+				me.$main.find(".twh-kcol").removeClass("droppable over");
+				me.move_card(card, from);
+			});
+		this.$main.find(".twh-buchips .twh-chip").on("click", function () {
+			me.$main.find(".twh-buchips .twh-chip").removeClass("on");
+			$(this).addClass("on");
+			const bu = $(this).attr("data-bu");
+			me.$main.find(".twh-kcard").each(function () {
+				$(this).toggle(!bu || $(this).attr("data-bu") === bu);
+			});
+		});
 		this.$main.find("[data-createwk]").on("click", function (e) {
 			e.stopPropagation();
 			const wk = cint($(this).attr("data-createwk"));
@@ -263,7 +330,7 @@ class TaskWorkHub {
 			[__("Unpaid Weeks"), k.unpaid_weeks, k.unpaid_weeks ? `KES ${this.kes(k.unpaid_net)} · ${this.esc(k.unpaid_label)}` : __("all settled")],
 		];
 		return `
-			${this.pagehead(__("Task Work Overview"), `${d.assignments.total} ${__("running assignments")} · ${d.workers.total} ${__("registered workers")}`)}
+			${this.pagehead(this.greeting(), `${d.assignments.total} ${__("running assignments")} · ${d.workers.total} ${__("registered workers")} · ${d.inbox.total} ${__("things waiting for you")}`)}
 			<div class="twh-kpis">${kpis
 				.map(
 					([label, value, unit]) => `
@@ -360,37 +427,174 @@ class TaskWorkHub {
 	render_pipeline() {
 		const p = this.data.pipeline;
 		const cols = [
-			[__("Requested"), "var(--twh-warn)", p.requested],
-			[__("Planned"), "var(--twh-clay)", p.planned],
-			[__("Running"), "var(--twh-ok)", p.running],
-			[__("Payment"), "var(--twh-teal)", p.payment],
+			["requested", __("Requested"), "var(--twh-warn)", p.requested],
+			["planned", __("Planned"), "var(--twh-clay)", p.planned],
+			["running", __("Running"), "var(--twh-ok)", p.running],
+			["payment", __("Payment"), "var(--twh-teal)", p.payment],
 		];
+		const bus = [...new Set(cols.flatMap(([, , , col]) => col.items.map((c) => c.bu)).filter(Boolean))];
+		const chips = bus.length
+			? `<div class="twh-buchips"><button class="twh-chip on" data-bu="">${__("All units")}</button>${bus
+					.map((b) => `<button class="twh-chip" data-bu="${this.esc(b)}">${this.esc(b)}</button>`)
+					.join("")}</div>`
+			: "";
 		return `
-			${this.pagehead(__("Pipeline"), __("most urgent first — click a card to open it, or the footer for the full list"))}
+			${this.pagehead(__("Pipeline"), __("drag a card to the next column to advance it — a popup collects what that step needs"))}
+			${chips}
 			<div class="twh-board">${cols
-				.map(([title, color, col]) => {
+				.map(([key, title, color, col]) => {
 					const more =
 						col.total > col.items.length
 							? `<div class="twh-kmore" ${this.viewall_attrs(col)}>+ ${col.total - col.items.length} ${__("more — open list")}</div>`
 							: "";
 					return `
-				<div class="twh-kcol">
+				<div class="twh-kcol" data-col="${key}">
 					<div class="head"><i style="background:${color}"></i>${title}<b>${this.count(col.total)}</b></div>
-					${col.items.length ? col.items.map((c) => this.kcard(c)).join("") : `<div class="twh-empty small">${__("Empty")}</div>`}
+					<div class="cards">${col.items.length ? col.items.map((c) => this.kcard(c, key)).join("") : `<div class="twh-empty small">${__("Empty")}</div>`}</div>
 					${more}
+					<div class="drophint">${this.icon("plus")} ${__("Drop here")}</div>
 				</div>`;
 				})
 				.join("")}</div>`;
 	}
 
-	kcard(c) {
+	kcard(c, col) {
+		const draggable = ["requested", "planned", "running"].includes(col) && !c.draft;
 		return `
-			<div class="twh-kcard tone-${c.tone}" data-route-dt="${this.esc(c.doctype)}" data-route-name="${this.esc(c.id)}">
-				<div class="id">${this.esc(c.id)}</div>
+			<div class="twh-kcard tone-${c.tone} ${draggable ? "grab" : ""}" ${draggable ? 'draggable="true"' : ""}
+				data-col="${col}" data-bu="${this.esc(c.bu || "")}" data-card="${this.esc(JSON.stringify(c))}"
+				data-route-dt="${this.esc(c.doctype)}" data-route-name="${this.esc(c.id)}">
+				<div class="id">${this.esc(c.id)}${draggable ? `<span class="grip" title="${__("Drag to advance")}">⋮⋮</span>` : ""}</div>
 				<div class="t">${this.esc(c.name)}</div>
 				<div class="m">${this.esc(c.meta)}</div>
 				<div class="foot"><span class="twh-sev ${c.tone}">${this.esc(c.badge)}</span><span class="kes">${this.kes(c.amount)}</span></div>
 			</div>`;
+	}
+
+	// ----------------------------------------------------- board transitions
+
+	next_col(col) {
+		return { requested: "planned", planned: "running", running: "payment" }[col];
+	}
+
+	move_card(card, from) {
+		if (from === "requested") this.dialog_request_to_plan(card);
+		else if (from === "planned") this.dialog_plan_to_assignment(card);
+		else if (from === "running") this.dialog_complete_assignment(card);
+	}
+
+	transition_dialog({ title, summary, fields, action_label, on_submit }) {
+		const d = new frappe.ui.Dialog({
+			title: title,
+			fields: [
+				{ fieldtype: "HTML", fieldname: "summary", options: `<div class="twhub twhub--dialog twh-movecard">${summary}</div>` },
+				...fields,
+			],
+			primary_action_label: action_label,
+			primary_action: (values) => {
+				d.get_primary_btn().prop("disabled", true);
+				on_submit(values, d);
+			},
+		});
+		d.show();
+		return d;
+	}
+
+	dialog_request_to_plan(card) {
+		const me = this;
+		this.transition_dialog({
+			title: __("Plan · {0}", [card.name]),
+			summary: `${this.icon("request")} <b>${this.esc(card.name)}</b><div class="sub">${this.esc(card.meta)} · ${__("est.")} KES ${this.kes(card.amount)}</div>
+				<div class="hint">${__("Creates a Task Work Plan pre-filled from this request — workers get picked on the plan.")}</div>`,
+			fields: [
+				{ fieldtype: "Date", fieldname: "expected_start_date", label: __("Expected Start Date"), default: frappe.datetime.add_days(frappe.datetime.get_today(), 1) },
+				{ fieldtype: "Small Text", fieldname: "note", label: __("Note for the planner (optional)") },
+			],
+			action_label: __("Create Plan"),
+			on_submit: (v, d) => {
+				frappe
+					.call("kaitet_taskwork.kaitet_taskwork.page.task_work_hub.task_work_hub.create_plan", {
+						request_name: card.id,
+						expected_start_date: v.expected_start_date,
+						note: v.note,
+					})
+					.then((r) => {
+						d.hide();
+						frappe.show_alert({ message: __("Planned → {0}", [r.message.name]), indicator: "green" });
+						me.load(true);
+					})
+					.finally(() => d.get_primary_btn().prop("disabled", false));
+			},
+		});
+	}
+
+	dialog_plan_to_assignment(card) {
+		const me = this;
+		this.transition_dialog({
+			title: __("Assign · {0}", [card.name]),
+			summary: `${this.icon("plan")} <b>${this.esc(card.name)}</b><div class="sub">${this.esc(card.meta)} · ${__("est.")} KES ${this.kes(card.amount)}</div>
+				<div class="hint">${__("Creates a Task Work Assignment with this plan's crew — adjust workers on the assignment before submitting.")}</div>`,
+			fields: [
+				{ fieldtype: "Date", fieldname: "start_date", label: __("Start Date"), default: card.start || frappe.datetime.get_today(), reqd: 1 },
+				{ fieldtype: "Date", fieldname: "expected_end_date", label: __("Expected End Date") },
+				{ fieldtype: "Small Text", fieldname: "note", label: __("Note for the supervisor (optional)") },
+			],
+			action_label: __("Create Assignment"),
+			on_submit: (v, d) => {
+				frappe
+					.call("kaitet_taskwork.kaitet_taskwork.page.task_work_hub.task_work_hub.create_assignment", {
+						plan_name: card.id,
+						start_date: v.start_date,
+						expected_end_date: v.expected_end_date,
+						note: v.note,
+					})
+					.then((r) => {
+						d.hide();
+						frappe.show_alert({ message: __("Assigned → {0}", [r.message.name]), indicator: "green" });
+						me.load(true);
+					})
+					.finally(() => d.get_primary_btn().prop("disabled", false));
+			},
+		});
+	}
+
+	dialog_complete_assignment(card) {
+		const me = this;
+		const missing = cint(card.crew) - cint(card.actuals_done);
+		const warn =
+			missing > 0
+				? `<div class="hint warn">${this.icon("x")} ${__("{0} of {1} workers have no actuals recorded — enter them first or they will be paid nothing.", [missing, card.crew])}</div>`
+				: `<div class="hint ok">${this.icon("check")} ${__("All {0} workers have actuals recorded.", [card.crew])}</div>`;
+		this.transition_dialog({
+			title: __("Complete · {0}", [card.name]),
+			summary: `${this.icon("task")} <b>${this.esc(card.name)}</b><div class="sub">${this.esc(card.meta)} · ${__("spend")} ${card.spend_pct || 0}%</div>${warn}
+				<div class="hint">${__("Completing moves it out of Running; its worked days land in the week's disbursement.")}</div>`,
+			fields: [
+				{ fieldtype: "Date", fieldname: "completion_date", label: __("Completion Date"), default: frappe.datetime.get_today(), reqd: 1 },
+				{ fieldtype: "Small Text", fieldname: "note", label: __("Closing note (optional)") },
+			],
+			action_label: __("Mark Completed"),
+			on_submit: (v, d) => {
+				frappe
+					.call("kaitet_taskwork.kaitet_taskwork.page.task_work_hub.task_work_hub.complete_assignment", {
+						assignment_name: card.id,
+						completion_date: v.completion_date,
+						note: v.note,
+					})
+					.then((r) => {
+						d.hide();
+						const m = r.message.workers_without_actuals;
+						frappe.show_alert({
+							message: m
+								? __("{0} completed — {1} workers still have no actuals", [r.message.name, m])
+								: __("{0} completed", [r.message.name]),
+							indicator: m ? "orange" : "green",
+						});
+						me.load(true);
+					})
+					.finally(() => d.get_primary_btn().prop("disabled", false));
+			},
+		});
 	}
 
 	// ------------------------------------------------------------ assignments
@@ -986,6 +1190,29 @@ class TaskWorkHub {
 		.twh-grouphead .n{font-size:10px;font-weight:600;background:rgba(10,10,10,0.06);border-radius:99px;padding:1px 8px;color:var(--twh-ink4)}
 		.twh-grouphead .twh-btn{margin-left:auto}
 		.twh-btn.small{padding:5px 12px;font-size:11px}
+		.twh-kcard.grab{cursor:grab}
+		.twh-kcard.grab:active{cursor:grabbing}
+		.twh-kcard.dragging{opacity:.4;transform:rotate(1.5deg) scale(.98)}
+		.twh-kcard .grip{float:right;color:var(--twh-mute);letter-spacing:-1px;font-size:10px;cursor:grab}
+		.twh-kcol .drophint{display:none;align-items:center;justify-content:center;gap:7px;margin-top:6px;padding:14px;border-radius:12px;border:2px dashed rgba(194,90,46,0.5);color:var(--twh-clay-deep);font-size:12px;font-weight:600}
+		.twh-kcol .drophint svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2}
+		.twh-kcol.droppable{box-shadow:inset 0 0 0 2px rgba(194,90,46,0.35)}
+		.twh-kcol.droppable .drophint{display:flex}
+		.twh-kcol.over{background:rgba(194,90,46,0.08)}
+		.twh-buchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+		.twh-chip{border:0;background:rgba(10,10,10,0.05);font-weight:500;font-size:12px;color:var(--twh-ink4);padding:7px 14px;border-radius:999px;cursor:pointer;transition:all .15s}
+		.twh-chip:hover{color:var(--twh-ink)}
+		.twh-chip.on{background:var(--twh-ink);color:#fafaf6}
+		.twh-movecard{margin-bottom:4px}
+		.twh-movecard b{color:var(--twh-ink);font-size:14px}
+		.twh-movecard svg{width:15px;height:15px;stroke:var(--twh-clay);fill:none;stroke-width:2;vertical-align:-2px;margin-right:6px}
+		.twh-movecard .sub{color:var(--twh-mute);font-size:12px;margin:2px 0 8px}
+		.twh-movecard .hint{background:rgba(10,10,10,0.03);border-radius:10px;padding:9px 12px;font-size:12px;color:var(--twh-ink4);margin-bottom:6px}
+		.twh-movecard .hint svg{width:12px;height:12px;margin-right:5px}
+		.twh-movecard .hint.warn{background:rgba(217,150,46,0.12);color:#96650f}
+		.twh-movecard .hint.warn svg{stroke:#96650f}
+		.twh-movecard .hint.ok{background:rgba(63,143,79,0.10);color:#2e6b3a}
+		.twh-movecard .hint.ok svg{stroke:#2e6b3a}
 		.twh-kmore{margin-top:2px;padding:9px;border-radius:12px;border:1.5px dashed rgba(10,10,10,0.15);text-align:center;font-size:11.5px;font-weight:600;color:var(--twh-ink4);cursor:pointer;transition:all .15s}
 		.twh-kmore:hover{background:var(--twh-ink);border-color:var(--twh-ink);color:#fafaf6}
 		.twh-inboxrow{display:grid;grid-template-columns:38px 1fr auto auto;gap:14px;align-items:center;padding:12px 8px;border-bottom:1px solid var(--twh-hair);border-radius:10px}

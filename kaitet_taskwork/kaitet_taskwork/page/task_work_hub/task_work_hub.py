@@ -135,7 +135,7 @@ def _get_assignments(today):
         filters={"parent": ("in", names), "parenttype": "Task Work Assignment"},
         fields=[
             "parent", "employee_name", "worker_full_name",
-            "total_assigned_cost", "actual_cost",
+            "total_assigned_cost", "actual_cost", "actual_quantity", "quantity_assigned",
         ],
     )
     crew_by_parent = {}
@@ -146,6 +146,10 @@ def _get_assignments(today):
         members = crew_by_parent.get(r["name"], [])
         r["crew"] = len(members)
         r["crew_names"] = [m.worker_full_name or m.employee_name for m in members][:6]
+        r["actuals_done"] = sum(
+            1 for m in members
+            if flt(m.actual_quantity) or not flt(m.quantity_assigned)
+        )
         assigned = sum(flt(m.total_assigned_cost) for m in members)
         actual = sum(flt(m.actual_cost) for m in members)
         est = flt(r.get("total_estimated_cost")) or assigned
@@ -419,6 +423,8 @@ def _build_pipeline(requests, plans, assignments, disbursements):
                 "amount": flt(r.get("estimated_cost")),
                 "badge": "draft" if r["is_draft"] else pretty_date(r["modified"]),
                 "tone": "ink" if r["is_draft"] else "warn",
+                "bu": r.get("business_unit"),
+                "draft": r["is_draft"],
                 "doctype": "Task Work Request",
             }
             for r in requests
@@ -432,6 +438,8 @@ def _build_pipeline(requests, plans, assignments, disbursements):
                 "amount": flt(p.get("approved_estimated_cost")),
                 "badge": "understaffed" if cint(p.get("understaffed_tasks")) else "ready",
                 "tone": "warn" if cint(p.get("understaffed_tasks")) else "clay",
+                "bu": p.get("business_unit"),
+                "start": str(p.get("custom_expected_start_date") or ""),
                 "doctype": "Task Work Plan",
             }
             for p in plans
@@ -444,6 +452,10 @@ def _build_pipeline(requests, plans, assignments, disbursements):
                 "amount": flt(a.get("total_estimated_cost")),
                 "badge": "over budget" if a["spend_pct"] > 100 else ("ends soon" if a.get("ends_soon") else "on track"),
                 "tone": "hot" if a["spend_pct"] > 100 else ("warn" if a.get("ends_soon") else "ok"),
+                "bu": a.get("business_unit"),
+                "crew": a["crew"],
+                "spend_pct": a["spend_pct"],
+                "actuals_done": a.get("actuals_done", 0),
                 "doctype": "Task Work Assignment",
             }
             for a in assignments
@@ -731,7 +743,7 @@ def save_actuals(assignment_name, actuals):
 
 
 @frappe.whitelist()
-def create_plan(request_name):
+def create_plan(request_name, expected_start_date=None, note=None):
     from kaitet_taskwork.kaitet_taskwork.doctype.task_work_request.task_work_request import (
         create_plan_from_request,
     )
@@ -740,11 +752,20 @@ def create_plan(request_name):
         frappe.throw(frappe._("Not permitted to create Task Work Plans"), frappe.PermissionError)
     result = create_plan_from_request(request_name)
     name = result.get("name") if isinstance(result, dict) else result
+
+    if expected_start_date or note:
+        plan = frappe.get_doc("Task Work Plan", name)
+        if expected_start_date:
+            plan.custom_expected_start_date = expected_start_date
+            plan.save()
+        if note:
+            plan.add_comment("Comment", note)
+
     return {"doctype": "Task Work Plan", "name": name}
 
 
 @frappe.whitelist()
-def create_assignment(plan_name):
+def create_assignment(plan_name, start_date=None, expected_end_date=None, note=None):
     from kaitet_taskwork.kaitet_taskwork.doctype.task_work_plan.task_work_plan import (
         create_assignment_from_plan,
     )
@@ -752,4 +773,51 @@ def create_assignment(plan_name):
     if not frappe.has_permission("Task Work Assignment", "create"):
         frappe.throw(frappe._("Not permitted to create Task Work Assignments"), frappe.PermissionError)
     name = create_assignment_from_plan(plan_name)
+
+    if start_date or expected_end_date or note:
+        doc = frappe.get_doc("Task Work Assignment", name)
+        if start_date:
+            doc.start_date = start_date
+            doc.expected_start_date = doc.expected_start_date or start_date
+        if expected_end_date:
+            doc.expected_end_date = expected_end_date
+        if start_date or expected_end_date:
+            doc.save()
+        if note:
+            doc.add_comment("Comment", note)
+
     return {"doctype": "Task Work Assignment", "name": name}
+
+
+@frappe.whitelist()
+def complete_assignment(assignment_name, completion_date=None, note=None):
+    """Mark a running assignment completed (the controller derives
+    stage from completion_date)."""
+    doc = frappe.get_doc("Task Work Assignment", assignment_name)
+    doc.check_permission("write")
+    if doc.docstatus == 2:
+        frappe.throw(frappe._("{0} is cancelled.").format(doc.name))
+    if doc.stage == "Completed":
+        frappe.throw(frappe._("{0} is already completed.").format(doc.name))
+
+    completion_date = completion_date or nowdate()
+    if doc.docstatus == 0:
+        doc.completion_date = completion_date
+        doc.save()  # validate() runs update_stage
+    else:
+        doc.db_set("completion_date", completion_date)
+        doc.db_set("stage", "Completed")
+
+    if note:
+        doc.add_comment("Comment", note)
+
+    missing = sum(
+        1 for r in doc.worker_assignments
+        if flt(r.quantity_assigned) > 0 and not flt(r.actual_quantity)
+    )
+    return {
+        "doctype": "Task Work Assignment",
+        "name": doc.name,
+        "stage": "Completed",
+        "workers_without_actuals": missing,
+    }
