@@ -218,11 +218,22 @@ def _get_disbursements(today):
             order_by="net_amount desc",
         )
 
+    actions = []
+    if latest:
+        from frappe.model.workflow import get_transitions
+
+        try:
+            doc = frappe.get_doc("TW Weekly Disbursement", latest["name"])
+            actions = [t.action for t in get_transitions(doc)]
+        except Exception:
+            actions = []
+
     return {
         "year": year,
         "current_week": today.isocalendar()[1],
         "list": rows,
         "latest": latest,
+        "latest_actions": actions,
         "entries": entries,
     }
 
@@ -496,31 +507,176 @@ def _build_top_tasks(assignments):
 # advances documents with one click and the client can route to the result.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Disbursement actions — the hub drives the same workflow as the form
+# (Draft → Pending Approval → Approved → Paid), so role rules and the
+# journal-entry posting on "Paid" apply unchanged.
+# ---------------------------------------------------------------------------
+
+@frappe.whitelist()
+def create_disbursement(year, week_number):
+    """Draft a TW Weekly Disbursement for an ISO week and load its worker
+    payments in one step."""
+    import datetime
+
+    if not frappe.has_permission("TW Weekly Disbursement", "create"):
+        frappe.throw(frappe._("Not permitted to create disbursements"), frappe.PermissionError)
+
+    year, week_number = cint(year), cint(week_number)
+    from kaitet_taskwork.kaitet_taskwork.permissions import get_user_company
+
+    company = (
+        get_user_company()
+        or frappe.defaults.get_user_default("company")
+        or frappe.defaults.get_global_default("company")
+    )
+    if not company:
+        frappe.throw(frappe._("Could not determine your company — set a default company first."))
+
+    existing = frappe.db.exists(
+        "TW Weekly Disbursement",
+        {"year": year, "week_number": week_number, "company": company, "docstatus": ("<", 2)},
+    )
+    if existing:
+        frappe.throw(frappe._("Week {0} already has disbursement {1}").format(week_number, frappe.bold(existing)))
+
+    week_start = datetime.date.fromisocalendar(year, week_number, 1)
+
+    from kaitet_taskwork.kaitet_taskwork.doctype.tw_weekly_disbursement.tw_weekly_disbursement import (
+        get_default_accounts,
+    )
+
+    accounts = get_default_accounts(company)
+
+    doc = frappe.new_doc("TW Weekly Disbursement")
+    doc.year = year
+    doc.week_number = week_number
+    doc.company = company
+    doc.posting_date = nowdate()
+    doc.week_start_date = week_start
+    doc.week_end_date = add_days(week_start, 6)
+    doc.wages_account = accounts.get("wages_account")
+    doc.payment_account = accounts.get("payment_account")
+    if not doc.wages_account or not doc.payment_account:
+        frappe.throw(frappe._("Default wages / payment accounts are not configured for {0}").format(company))
+
+    doc.insert()
+    doc.get_worker_payments()
+    doc.save()
+
+    return {
+        "name": doc.name,
+        "workers": cint(doc.total_workers),
+        "total_net": flt(doc.total_net),
+    }
+
+
+@frappe.whitelist()
+def reload_disbursement_payments(disbursement_name):
+    """Re-pull worker payments into a draft disbursement."""
+    doc = frappe.get_doc("TW Weekly Disbursement", disbursement_name)
+    doc.check_permission("write")
+    if doc.docstatus != 0:
+        frappe.throw(frappe._("{0} is no longer a draft — payments are locked.").format(doc.name))
+    doc.get_worker_payments()
+    doc.save()
+    return {"name": doc.name, "workers": cint(doc.total_workers), "total_net": flt(doc.total_net)}
+
+
+@frappe.whitelist()
+def disbursement_action(disbursement_name, action):
+    """Apply a workflow action (Submit for Approval / Approve / Reject /
+    Mark as Paid). Role checks come from the workflow itself."""
+    from frappe.model.workflow import apply_workflow
+
+    doc = frappe.get_doc("TW Weekly Disbursement", disbursement_name)
+    doc = apply_workflow(doc, action)
+    return {"name": doc.name, "status": doc.status, "docstatus": doc.docstatus}
+
+
 @frappe.whitelist()
 def get_assignment_actuals(assignment_name):
     """Crew rows of one assignment for the hub's Enter Actuals editor."""
     doc = frappe.get_doc("Task Work Assignment", assignment_name)
     doc.check_permission("read")
+
+    # resolve display names — worker_full_name is often blank, and the
+    # link value alone is just a payroll/registry number
+    worker_ids = [r.employee_name for r in doc.worker_assignments if r.employee_name]
+    worker_info = {}
+    if worker_ids:
+        for w in frappe.get_all(
+            "Task Worker",
+            filters={"name": ("in", worker_ids)},
+            fields=["name", "full_name", "payroll_number", "phone", "payment_method"],
+        ):
+            worker_info[w.name] = w
+        # legacy crew rows link Employee ids rather than Task Workers
+        unresolved = [i for i in worker_ids if i not in worker_info]
+        if unresolved:
+            for e in frappe.get_all(
+                "Employee",
+                filters={"name": ("in", unresolved)},
+                fields=["name", "employee_name", "cell_number"],
+            ):
+                worker_info[e.name] = frappe._dict(
+                    full_name=e.employee_name, payroll_number=e.name, phone=e.cell_number, payment_method=None
+                )
+
+    tasks = [
+        {
+            "task": t.task,
+            "task_name": t.task_name or t.task,
+            "uom": t.uom,
+            "daily_target": cint(t.daily_target),
+            "total_work": cint(t.total_work),
+            "rate": flt(t.rate),
+            "workers": cint(t.workers),
+            "days": cint(t.days),
+            "status": t.status,
+        }
+        for t in doc.task_details
+    ]
+
+    rows = []
+    for r in doc.worker_assignments:
+        info = worker_info.get(r.employee_name) or frappe._dict()
+        rows.append({
+            "name": r.name,
+            "task": r.task,
+            "worker_id": r.employee_name,
+            "worker": r.worker_full_name or info.get("full_name") or r.employee_name,
+            "payroll_number": info.get("payroll_number") or r.employee_name,
+            "phone": info.get("phone"),
+            "payment_method": info.get("payment_method"),
+            "uom": r.uom,
+            "daily_target": flt(r.daily_target),
+            "quantity_assigned": flt(r.quantity_assigned),
+            "days": cint(r.days),
+            "rate": flt(r.rate),
+            "total_assigned_cost": flt(r.total_assigned_cost),
+            "actual_quantity": flt(r.actual_quantity),
+            "actual_cost": flt(r.actual_cost),
+            "achievement": flt(r.achievement),
+        })
+
     return {
         "name": doc.name,
         "title": doc.title or doc.name,
         "stage": doc.stage,
         "docstatus": doc.docstatus,
-        "rows": [
-            {
-                "name": r.name,
-                "task": r.task,
-                "worker": r.worker_full_name or r.employee_name,
-                "uom": r.uom,
-                "quantity_assigned": flt(r.quantity_assigned),
-                "days": cint(r.days),
-                "rate": flt(r.rate),
-                "actual_quantity": flt(r.actual_quantity),
-                "actual_cost": flt(r.actual_cost),
-                "achievement": flt(r.achievement),
-            }
-            for r in doc.worker_assignments
-        ],
+        "start_date": str(doc.start_date) if doc.start_date else None,
+        "expected_end_date": str(doc.expected_end_date) if doc.expected_end_date else None,
+        "farm_manager": doc.farm_manager,
+        "total_estimated_cost": flt(doc.total_estimated_cost),
+        "tasks": tasks,
+        "rows": rows,
+        "totals": {
+            "assigned": sum(r["quantity_assigned"] for r in rows),
+            "actual": sum(r["actual_quantity"] for r in rows),
+            "assigned_cost": sum(r["total_assigned_cost"] for r in rows),
+            "actual_cost": sum(r["actual_cost"] for r in rows),
+        },
     }
 
 
