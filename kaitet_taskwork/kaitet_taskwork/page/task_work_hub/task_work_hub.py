@@ -79,7 +79,7 @@ def _get_requests():
             "name", "title", "farm_managers_name", "unitdivision", "business_unit",
             "posting_date", "estimated_cost", "total_workers", "modified",
         ],
-        order_by="posting_date asc",
+        order_by="modified desc",
         limit_page_length=QUERY_LIMIT,
     )
     drafts = frappe.get_list(
@@ -108,7 +108,7 @@ def _get_plans():
             "total_workers_planned", "understaffed_tasks", "approved_estimated_cost",
             "custom_expected_start_date", "task_work_request_ref", "modified",
         ],
-        order_by="modified asc",
+        order_by="modified desc",
         limit_page_length=QUERY_LIMIT,
     )
     return rows
@@ -166,13 +166,10 @@ def _get_assignments(today):
             r["day"] = 0
         r["ends_soon"] = bool(end and 0 <= date_diff(end, today) <= 3)
 
-    # urgency first: over budget, then ending soon, then oldest start date
-    rows.sort(
-        key=lambda r: (
-            0 if r["spend_pct"] > 100 else 1 if r.get("ends_soon") else 2,
-            str(r.get("start_date") or "9999"),
-        )
-    )
+    # urgency first: over budget, then ending soon; within a class the
+    # most recently started work leads
+    rows.sort(key=lambda r: str(r.get("start_date") or ""), reverse=True)
+    rows.sort(key=lambda r: 0 if r["spend_pct"] > 100 else 1 if r.get("ends_soon") else 2)
     return rows
 
 
@@ -184,7 +181,7 @@ def _get_change_requests():
             "name", "title", "change_type", "task_work_assignment",
             "old_employee", "new_employee", "reason", "request_date", "modified",
         ],
-        order_by="modified asc",
+        order_by="modified desc",
         limit_page_length=QUERY_LIMIT,
     )
 
@@ -313,7 +310,7 @@ def _build_kpis(requests, plans, assignments, change_requests, disbursements, wo
 
 
 def _build_inbox(requests, plans, change_requests, disbursements):
-    """Grouped by kind, each group capped to INBOX_CAP oldest-first with the
+    """Grouped by kind, each group capped to INBOX_CAP newest-first with the
     true total and a filtered list route for the overflow."""
     unpaid = [
         d for d in disbursements["list"]
