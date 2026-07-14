@@ -516,6 +516,14 @@ def _build_top_tasks(assignments):
 # advances documents with one click and the client can route to the result.
 # ---------------------------------------------------------------------------
 
+@frappe.whitelist()
+def get_assignment_rows(start=0, limit=25):
+    """Next page of the urgency-sorted assignments table."""
+    rows = _get_assignments(getdate(nowdate()))
+    start, limit = cint(start), max(cint(limit), 1)
+    return {"total": len(rows), "items": rows[start:start + limit]}
+
+
 # ---------------------------------------------------------------------------
 # Disbursement actions — the hub drives the same workflow as the form
 # (Draft → Pending Approval → Approved → Paid), so role rules and the

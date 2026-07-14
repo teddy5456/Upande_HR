@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"type\":\"onboarding\",\"data\":{\"onboarding_name\":\"Task Work\",\"col\":12}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"header\",\"data\":{\"text\":\"<h3>Masters</h3>\",\"col\":12}},{\"type\":\"card\",\"data\":{\"card_name\":\"Workers & Locations\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Task Work Operations\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Disbursements\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"HR & Approvals\",\"col\":4}}]",
+ "content": "[{\"type\": \"header\", \"data\": {\"text\": \"<h3>Everything happens in the Hub</h3>\", \"col\": 12}}, {\"type\": \"paragraph\", \"data\": {\"text\": \"Requests, planning, assignments, actuals and weekly payments \\u2014 use the <b>Task Work Hub</b> shortcut below. The cards underneath open the raw documents for corrections and admin.\", \"col\": 12}}, {\"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Workers & Locations\", \"col\": 4}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Task Work Operations\", \"col\": 4}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Disbursements\", \"col\": 4}}, {\"type\": \"card\", \"data\": {\"card_name\": \"HR & Approvals\", \"col\": 4}}]",
  "creation": "2026-02-23 08:00:00.000000",
  "doctype": "Workspace",
  "hide_custom": 0,

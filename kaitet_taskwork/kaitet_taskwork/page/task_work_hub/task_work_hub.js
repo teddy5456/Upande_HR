@@ -208,6 +208,21 @@ class TaskWorkHub {
 		this.$main.find("[data-listview]").on("click", function () {
 			frappe.set_route("List", $(this).attr("data-listview"));
 		});
+		this.$main.find("[data-more-asg]").on("click", function (e) {
+			e.stopPropagation();
+			const $btn = $(this).prop("disabled", true).text(__("Loading…"));
+			frappe
+				.call("kaitet_taskwork.kaitet_taskwork.page.task_work_hub.task_work_hub.get_assignment_rows", {
+					start: me.data.assignments.items.length,
+					limit: 25,
+				})
+				.then((r) => {
+					me.data.assignments.items = me.data.assignments.items.concat(r.message.items);
+					me.data.assignments.total = r.message.total;
+					me.render();
+				})
+				.finally(() => $btn.prop("disabled", false));
+		});
 		this.$main.find("[data-viewall]").on("click", function (e) {
 			e.stopPropagation();
 			try {
@@ -278,6 +293,14 @@ class TaskWorkHub {
 						me.load(true);
 					});
 			});
+		});
+		this.$main.find("[data-printreg]").on("click", function (e) {
+			e.stopPropagation();
+			const name = $(this).attr("data-printreg");
+			window.open(
+				`/printview?doctype=${encodeURIComponent("TW Weekly Disbursement")}&name=${encodeURIComponent(name)}&format=${encodeURIComponent("Weekly Payment Register")}&no_letterhead=1`,
+				"_blank"
+			);
 		});
 		this.$main.find("[data-disb-reload]").on("click", function (e) {
 			e.stopPropagation();
@@ -634,7 +657,7 @@ class TaskWorkHub {
 		const overflow =
 			asg.total > rows.length
 				? `<div class="twh-empty small">
-					<button class="twh-btn ghost small" data-viewall="Task Work Assignment" data-viewall-filters="${this.esc(JSON.stringify({ stage: ["in", ["Pending", "In Progress"]] }))}">${__("Show all {0} assignments", [this.count(asg.total)])}</button>
+					<button class="twh-btn ghost small" data-more-asg="1">${__("Show more ({0} of {1})", [rows.length, this.count(asg.total)])}</button>
 				</div>`
 				: "";
 		const trs = rows
@@ -974,6 +997,7 @@ class TaskWorkHub {
 					`<button class="twh-btn ${a === "Reject" ? "ghost" : ""}" data-disb-action="${this.esc(a)}" data-disb-name="${this.esc(latest.name)}">${this.icon(action_icons[a] || "check")}${__(a)}</button>`
 				);
 			});
+			btns.push(`<button class="twh-btn ghost" data-printreg="${this.esc(latest.name)}">${this.icon("task")}${__("Print Register")}</button>`);
 			btns.push(`<button class="twh-btn ghost" data-route-dt="TW Weekly Disbursement" data-route-name="${this.esc(latest.name)}">${__("Open Form")}</button>`);
 			const status_tone = latest.status === "Paid" ? "ok" : latest.status === "Draft" ? "ink" : latest.status === "Rejected" ? "hot" : "clay";
 			bar = `
