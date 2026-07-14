@@ -114,7 +114,17 @@ def _get_plans():
     return rows
 
 
-def _get_assignments(today):
+def _get_assignments(today, search=None):
+    kwargs = {}
+    if search:
+        like = f"%{search}%"
+        kwargs["or_filters"] = [
+            ["name", "like", like],
+            ["title", "like", like],
+            ["business_unit", "like", like],
+            ["unitdivision", "like", like],
+            ["farm_manager", "like", like],
+        ]
     rows = frappe.get_list(
         "Task Work Assignment",
         filters={"docstatus": ("<", 2), "stage": ("in", ACTIVE_ASSIGNMENT_STAGES)},
@@ -125,6 +135,7 @@ def _get_assignments(today):
         ],
         order_by="start_date asc",
         limit_page_length=QUERY_LIMIT,
+        **kwargs,
     )
     if not rows:
         return rows
@@ -517,9 +528,10 @@ def _build_top_tasks(assignments):
 # ---------------------------------------------------------------------------
 
 @frappe.whitelist()
-def get_assignment_rows(start=0, limit=25):
-    """Next page of the urgency-sorted assignments table."""
-    rows = _get_assignments(getdate(nowdate()))
+def get_assignment_rows(start=0, limit=25, search=None):
+    """Page of the urgency-sorted assignments table, optionally filtered by
+    a search that runs over the whole table (not just loaded rows)."""
+    rows = _get_assignments(getdate(nowdate()), search=(search or "").strip() or None)
     start, limit = cint(start), max(cint(limit), 1)
     return {"total": len(rows), "items": rows[start:start + limit]}
 

@@ -215,6 +215,7 @@ class TaskWorkHub {
 				.call("kaitet_taskwork.kaitet_taskwork.page.task_work_hub.task_work_hub.get_assignment_rows", {
 					start: me.data.assignments.items.length,
 					limit: 25,
+					search: me.asg_search || null,
 				})
 				.then((r) => {
 					me.data.assignments.items = me.data.assignments.items.concat(r.message.items);
@@ -337,12 +338,12 @@ class TaskWorkHub {
 			}
 		});
 		this.$main.find(".twh-search input").on("input", function () {
-			const q = $(this).val().toLowerCase();
 			if ($(this).attr("data-filter") === "asg") {
-				me.$main.find(".twh-asgtable tbody tr").each(function () {
-					$(this).toggle($(this).text().toLowerCase().includes(q));
-				});
+				const q = $(this).val();
+				clearTimeout(me._asg_search_timer);
+				me._asg_search_timer = setTimeout(() => me.search_assignments(q), 350);
 			} else {
+				const q = $(this).val().toLowerCase();
 				me.$main.find(".twh-wcard").each(function () {
 					$(this).toggle($(this).text().toLowerCase().includes(q));
 				});
@@ -684,20 +685,41 @@ class TaskWorkHub {
 				</tr>`;
 			})
 			.join("");
-		const body = rows.length
-			? `<div class="twh-card">
-				<div class="twh-cardhead">
-					<div class="twh-search"><input type="text" data-filter="asg" placeholder="${__("Filter by title, unit, id…")}"></div>
-					<span class="meta">${__("click a row to open · Enter Actuals records work done")}</span>
-				</div>
-				<table class="twh-table twh-asgtable">
+		const table = rows.length
+			? `<table class="twh-table twh-asgtable">
 					<thead><tr><th>${__("Assignment")}</th><th>${__("Status")}</th><th class="num">${__("Crew")}</th><th class="num">${__("Day")}</th><th></th><th class="num">${__("Spend")}</th><th class="num">${__("Est. KES")}</th><th></th></tr></thead>
 					<tbody>${trs}</tbody>
 				</table>
-				${overflow}
-			</div>`
-			: `<div class="twh-card"><div class="twh-empty">${__("No running assignments. Create one from a submitted plan on the Pipeline view.")}</div></div>`;
+				${overflow}`
+			: this.asg_search
+			? `<div class="twh-empty">${__("Nothing matches “{0}” — clear the search to see all assignments.", [this.esc(this.asg_search)])}</div>`
+			: `<div class="twh-empty">${__("No running assignments. Create one from a submitted plan on the Pipeline view.")}</div>`;
+		const body = `<div class="twh-card">
+				<div class="twh-cardhead">
+					<div class="twh-search"><input type="text" data-filter="asg" value="${this.esc(this.asg_search || "")}" placeholder="${__("Search all assignments — title, unit, id, manager…")}"></div>
+					<span class="meta">${__("click a row to open · Enter Actuals records work done")}</span>
+				</div>
+				${table}
+			</div>`;
 		return `${this.pagehead(__("Assignments"), sub)}${body}`;
+	}
+
+	search_assignments(q) {
+		this.asg_search = q;
+		frappe
+			.call("kaitet_taskwork.kaitet_taskwork.page.task_work_hub.task_work_hub.get_assignment_rows", {
+				start: 0,
+				limit: 25,
+				search: q || null,
+			})
+			.then((r) => {
+				this.data.assignments.items = r.message.items;
+				this.data.assignments.total = r.message.total;
+				this.render();
+				const $inp = this.$main.find('.twh-search input[data-filter="asg"]');
+				const v = $inp.val();
+				$inp.trigger("focus").val("").val(v); // cursor to end
+			});
 	}
 
 	// ------------------------------------------------------- actuals editor
